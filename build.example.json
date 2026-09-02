@@ -1,0 +1,20 @@
+{
+    "android": {
+        "debug": {
+            "keystore": "./keystore.jks",
+            "storePassword": "<store-password>",
+            "alias": "encedoauth",
+            "password": "<key-password>",
+            "keystoreType": "jks",
+            "packageType": "apk"
+        },
+        "release": {
+            "keystore": "./keystore.jks",
+            "storePassword": "<store-password>",
+            "alias": "encedoauth",
+            "password": "<key-password>",
+            "keystoreType": "jks",
+            "packageType": "bundle"
+        }
+    }
+}

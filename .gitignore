@@ -1,0 +1,23 @@
+# Cordova v1: dependencies and build outputs
+node_modules/
+platforms/
+plugins/
+output/
+*.apk
+*.aab
+.gradle/
+
+# Secrets stay outside the repo (see build.example.json)
+keystore.jks
+build.json
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Tauri v2 (future)
+src-tauri/target/
+src-tauri/gen/schemas/
+dist/

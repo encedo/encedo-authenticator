@@ -215,14 +215,16 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--sealed); ou
 
 /* Camera view: a frame and four corners, nothing more. The plugin draws the
    picture behind a transparent webview in Phase 5. */
-.viewfinder { flex: 1; min-height: 300px; margin: 0 calc(-1 * var(--pad)); background: var(--sunken); position: relative; display: flex; align-items: center; justify-content: center; }
+.screen-body.scan { overflow: hidden; gap: 14px; }
+.screen-body.scan .page-head { padding-top: 10px; }
+.viewfinder { flex: 1; min-height: 200px; margin: 0 calc(-1 * var(--pad)); background: var(--sunken); position: relative; display: flex; align-items: center; justify-content: center; }
 .viewfinder .frame { width: 232px; height: 232px; position: relative; }
 .viewfinder .frame i { position: absolute; width: 28px; height: 28px; border: 2px solid var(--sealed); }
 .viewfinder .frame i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; }
 .viewfinder .frame i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; }
 .viewfinder .frame i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; }
 .viewfinder .frame i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; }
-.viewfinder .hint { position: absolute; bottom: 16px; left: 0; right: 0; text-align: center; font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.viewfinder .hint { position: absolute; bottom: 16px; left: 0; right: 0; text-align: center; font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; color: var(--band-ink); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
 
 /* While the barcode scanner runs, the camera preview sits behind the webview:
    everything on the way to the viewfinder goes transparent. */

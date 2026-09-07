@@ -60,7 +60,8 @@ class AppState {
   get tab(): Tab | null {
     switch (this.screen.name) {
       case "home": return "home";
-      case "modules": case "module": case "pair": case "pairConfirm": return "modules";
+      case "modules": case "module": case "pairConfirm": return "modules";
+      case "pair": return null; // camera takes the screen
       case "archive": return "archive";
       case "settings": case "about": return "settings";
       default: return null;

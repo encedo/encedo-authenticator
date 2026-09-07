@@ -34,7 +34,7 @@
 
 <div class="screen">
   <Masthead back={leave} backLabel="Modules" />
-  <div class="screen-body">
+  <div class="screen-body scan">
     <div class="page-head">
       <p class="eyebrow" class:exposed={status === "denied" || status === "error"}>Pair a module</p>
       {#if status === "denied"}
@@ -45,12 +45,11 @@
         <p class="mono" style="font-size:12.5px">{error}</p>
       {:else}
         <h1>Scan the code the Manager shows.</h1>
-        <p>It carries the pairing link and a hash of the module's challenge. The phone checks that hash against the request it fetches next.</p>
       {/if}
     </div>
     <div class="viewfinder">
       <div class="frame"><i></i><i></i><i></i><i></i></div>
-      <div class="hint">{status === "scanning" ? "camera" : inTauri ? "camera off" : "no camera in a browser"}</div>
+      <div class="hint">{status === "scanning" ? "Manager · Paired phones · Pair a phone" : inTauri ? "camera off" : "no camera in a browser"}</div>
     </div>
   </div>
   <div class="screen-actions row">

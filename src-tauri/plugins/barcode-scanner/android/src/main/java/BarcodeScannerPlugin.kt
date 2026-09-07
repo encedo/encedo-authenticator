@@ -61,6 +61,13 @@ class ScanOptions {
     var formats: Array<String>? = null
     var windowed: Boolean = false
     var cameraDirection: String? = null
+    /** Encedo: zoom ratio to open at (clamped to what the lens offers). */
+    var zoom: Float? = null
+}
+
+@InvokeArg
+class ZoomArgs {
+    var ratio: Float = 1f
 }
 
 @TauriPlugin(
@@ -89,6 +96,7 @@ class BarcodeScannerPlugin(private val activity: Activity) : Plugin(activity),
 
     private var savedInvoke: Invoke? = null
     private var webViewBackground: Drawable? = null
+    private var startZoom: Float? = null
 
     override fun load(webView: WebView) {
         super.load(webView)
@@ -191,6 +199,7 @@ class BarcodeScannerPlugin(private val activity: Activity) : Plugin(activity),
                         preview,
                         imageAnalysis
                     )
+                    startZoom?.let { applyZoom(it) }
                 } catch (e: Exception) {
                     // TODO
                 }
@@ -333,6 +342,44 @@ class BarcodeScannerPlugin(private val activity: Activity) : Plugin(activity),
         invoke.resolve()
     }
 
+    /** Encedo: the camera's own zoom, so a code at arm's length arrives bigger and sharper. */
+    private fun applyZoom(ratio: Float): Float? {
+        val cam = camera ?: return null
+        val st = cam.cameraInfo.zoomState.value
+        val min = st?.minZoomRatio ?: 1f
+        val max = st?.maxZoomRatio ?: 1f
+        val z = ratio.coerceIn(min, max)
+        cam.cameraControl.setZoomRatio(z)
+        return z
+    }
+
+    @Command
+    fun setZoom(invoke: Invoke) {
+        val args = invoke.parseArgs(ZoomArgs::class.java)
+        val z = applyZoom(args.ratio)
+        if (z == null) {
+            invoke.reject("camera not running")
+            return
+        }
+        val out = JSObject()
+        out.put("ratio", z)
+        invoke.resolve(out)
+    }
+
+    @Command
+    fun zoomRange(invoke: Invoke) {
+        val st = camera?.cameraInfo?.zoomState?.value
+        if (st == null) {
+            invoke.reject("camera not running")
+            return
+        }
+        val out = JSObject()
+        out.put("min", st.minZoomRatio)
+        out.put("max", st.maxZoomRatio)
+        out.put("current", st.zoomRatio)
+        invoke.resolve(out)
+    }
+
     @Command
     fun cancel(invoke: Invoke) {
         destroy()
@@ -350,6 +397,7 @@ class BarcodeScannerPlugin(private val activity: Activity) : Plugin(activity),
                 throw Exception("No permission to use camera. Did you request it yet?")
             } else {
                 webViewBackground = null
+                startZoom = args.zoom
                 prepare(args.cameraDirection ?: "back", args.windowed)
                 configureCamera(getFormats(args))
             }

@@ -9,6 +9,8 @@ const COMMANDS: &[&str] = &[
     "check_permissions",
     "open_app_settings",
     "vibrate",
+    "set_zoom",
+    "zoom_range",
 ];
 
 fn main() {

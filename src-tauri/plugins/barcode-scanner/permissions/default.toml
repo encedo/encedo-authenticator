@@ -17,4 +17,6 @@ permissions = [
   "allow-request-permissions",
   "allow-scan",
   "allow-vibrate",
+  "allow-set-zoom",
+  "allow-zoom-range",
 ]

@@ -233,3 +233,8 @@ html.scanning .masthead, html.scanning .page-head, html.scanning .screen-actions
 html.scanning .page-head { margin: 0 calc(-1 * var(--pad)); padding-left: var(--pad); padding-right: var(--pad); padding-bottom: 12px; }
 .copy { all: unset; cursor: pointer; font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .copy:hover, .copy.done { color: var(--sealed); }
+
+/* Camera zoom over the viewfinder, only when the lens reports a range. */
+.zoom-row { position: absolute; bottom: 14px; left: var(--pad); right: var(--pad); display: flex; align-items: center; gap: 12px; }
+.zoom-row .zoom-lab { font-family: var(--mono); font-size: 12px; min-width: 3.2em; text-align: right; color: var(--band-ink); text-shadow: 0 1px 2px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
+.zoom-row input[type="range"] { flex: 1; height: 44px; accent-color: var(--sealed); background: transparent; }

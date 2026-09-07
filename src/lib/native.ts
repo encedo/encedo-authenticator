@@ -21,7 +21,7 @@ export interface PushMessage {
 
 /** Scan one QR code with the camera behind a transparent webview. Returns the
  *  content, or null when the user cancelled or the camera is not available. */
-export async function scanQr(): Promise<string | null> {
+export async function scanQr(zoom?: number): Promise<string | null> {
   if (!inTauri) return null;
   const s = await import("@tauri-apps/plugin-barcode-scanner");
   let p = await s.checkPermissions();
@@ -29,7 +29,7 @@ export async function scanQr(): Promise<string | null> {
   if (p !== "granted") throw new Error("camera permission denied");
   document.documentElement.classList.add("scanning");
   try {
-    const r = await s.scan({ windowed: true, formats: [s.Format.QRCode], cameraDirection: "back" });
+    const r = await s.scan({ windowed: true, formats: [s.Format.QRCode], cameraDirection: "back", zoom } as Parameters<typeof s.scan>[0]);
     return r.content;
   } catch (e) {
     if (String(e).toLowerCase().includes("cancel")) return null;
@@ -44,6 +44,21 @@ export async function cancelScan() {
   const s = await import("@tauri-apps/plugin-barcode-scanner");
   await s.cancel().catch(() => {});
   document.documentElement.classList.remove("scanning");
+}
+
+export interface ZoomRange { min: number; max: number; current: number }
+
+/** The lens's zoom range while the scanner runs; null before the camera is bound. */
+export async function scanZoomRange(): Promise<ZoomRange | null> {
+  if (!inTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try { return await invoke<ZoomRange>("plugin:barcode-scanner|zoom_range"); } catch { return null; }
+}
+
+export async function setScanZoom(ratio: number): Promise<number | null> {
+  if (!inTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try { return (await invoke<{ ratio: number }>("plugin:barcode-scanner|set_zoom", { ratio })).ratio; } catch { return null; }
 }
 
 export async function openAppSettings() {

@@ -1,5 +1,6 @@
 import type { AccessRequest, ArchiveEntry, Module, Outcome, Settings } from "./types";
 import * as mock from "./mock";
+import { inTauri, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
 
 export type Screen =
   | { name: "welcome" }
@@ -8,7 +9,7 @@ export type Screen =
   | { name: "modules" }
   | { name: "module"; pid: string }
   | { name: "pair" }
-  | { name: "pairConfirm"; label: string; host: string }
+  | { name: "pairConfirm"; label: string; host: string; raw?: string }
   | { name: "request"; id: string }
   | { name: "result"; outcome: Outcome; title: string; detail?: string }
   | { name: "archive"; pid?: string }
@@ -37,6 +38,8 @@ class AppState {
   pending = $state<AccessRequest[]>([]);
   archive = $state<ArchiveEntry[]>([...mock.archive]);
   online = $state(true);
+  push = $state<PushState>({ status: inTauri ? "pending" : "unavailable" });
+  pushLog = $state<PushMessage[]>([]);
 
   constructor() {
     if (this.settings.onboarded) {
@@ -70,6 +73,26 @@ class AppState {
   finishOnboarding() {
     this.settings.onboarded = true;
     this.screen = { name: "home" };
+    void this.askPushPermission();
+  }
+
+  /** Start listening for push tokens and messages. Called once at launch. */
+  async startNative() {
+    if (!inTauri) return;
+    this.push = await startPush({
+      onToken: (token) => { this.push = { ...this.push, status: "registered", token }; },
+      onMessage: (m) => { this.pushLog = [m, ...this.pushLog].slice(0, 20); },
+    });
+  }
+
+  async askPushPermission() {
+    if (!inTauri) return;
+    try {
+      const granted = await requestPushPermission();
+      this.push = { ...this.push, permission: granted ? "granted" : "denied" };
+    } catch (e) {
+      this.push = { ...this.push, error: String(e) };
+    }
   }
 
   unlock() {

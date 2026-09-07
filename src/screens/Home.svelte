@@ -15,7 +15,7 @@
       <p class="eyebrow" class:exposed={!app.online}>Now</p>
       <h1>{heading}</h1>
       {#if app.online}
-        <p>Push is registered. {count(app.modules.length, "module")} can ask you.</p>
+        <p>{app.push.status === "registered" ? "Push is registered." : app.push.status === "pending" ? "Push is registering." : "Push is not available here."} {count(app.modules.length, "module")} can ask you.</p>
       {:else}
         <p>A request cannot be answered until the network is back. The module keeps waiting, then gives up on its own.</p>
       {/if}
@@ -31,6 +31,17 @@
               <svg class="chev" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" /></svg>
             </button></li>
           {/each}
+        </ul>
+      </div>
+    {/if}
+
+    {#if app.pushLog.length}
+      <div class="card">
+        <div class="card-head"><span>Last push</span><span class="v">{app.pushLog.length}</span></div>
+        <ul class="records">
+          <li><div class="row">
+            <span class="main"><span class="name">{app.pushLog[0].title ?? "(data only)"}</span><span class="sub">{app.pushLog[0].body ?? ""}{Object.keys(app.pushLog[0].data).length ? " · " + JSON.stringify(app.pushLog[0].data) : ""}</span></span>
+          </div></li>
         </ul>
       </div>
     {/if}

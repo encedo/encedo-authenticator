@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app } from "../lib/state.svelte";
   import Masthead from "../lib/Masthead.svelte";
-  let { label, host }: { label: string; host: string } = $props();
+  let { label, host, raw }: { label: string; host: string; raw?: string } = $props();
   // svelte-ignore state_referenced_locally
   let name = $state(label);
 </script>
@@ -23,6 +23,13 @@
         <div><dt>This phone</dt><dd>Pixel 8</dd></div>
       </dl>
     </div>
+    {#if raw}
+      <div class="field">
+        <span class="label">What the code says</span>
+        <div class="blob">{raw}</div>
+        <span class="hint">Phase 2 fetches this link, checks the hash, and only then asks you.</span>
+      </div>
+    {/if}
     <div class="field">
       <label for="label">Name on this phone</label>
       <input id="label" bind:value={name} placeholder="Module label" />

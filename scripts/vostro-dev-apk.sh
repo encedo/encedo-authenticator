@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Build the .dev test APK on vostro: same code, applicationId with a .dev suffix
+# so it installs next to v1 from Google Play. Run on vostro after rsync.
+#   scripts/vostro-dev-apk.sh [targets...]   (default: aarch64 x86_64)
+set -euo pipefail
+source ~/.android-env.sh
+SRC=~/develop/encedo-authenticator
+DEV=~/develop/encedo-authenticator-dev
+TARGETS=("${@:-aarch64 x86_64}")
+rsync -a --delete --exclude node_modules --exclude 'src-tauri/target' --exclude 'src-tauri/gen/android/app/build' --exclude 'src-tauri/gen/android/.gradle' "$SRC/" "$DEV/"
+cd "$DEV"
+npm install --no-audit --no-fund
+sed -i 's/applicationId = "com.encedo.mobile.auth.android"/applicationId = "com.encedo.mobile.auth.android.dev"/' src-tauri/gen/android/app/build.gradle.kts
+sed -i 's/<string name="app_name">[^<]*<\/string>/<string name="app_name">Encedo Auth dev<\/string>/; s/<string name="main_activity_title">[^<]*<\/string>/<string name="main_activity_title">Encedo Auth dev<\/string>/' src-tauri/gen/android/app/src/main/res/values/strings.xml
+[ -f src-tauri/gen/android/app/src/main/res/values/firebase.xml ] || { echo "missing firebase.xml: run scripts/firebase-res.py first"; exit 1; }
+args=(); for t in ${TARGETS[@]}; do args+=(--target "$t"); done
+cargo tauri android build --apk "${args[@]}"
+BT=$(ls -d ~/Android/Sdk/build-tools/35.0.0)
+OUT=src-tauri/gen/android/app/build/outputs/apk/universal/release
+"$BT/zipalign" -p -f 4 "$OUT/app-universal-release-unsigned.apk" "$OUT/aligned.apk"
+"$BT/apksigner" sign --ks ~/.android/debug.keystore --ks-pass pass:android --key-pass pass:android --out ~/encedo-auth-dev.apk "$OUT/aligned.apk"
+"$BT/aapt" dump badging ~/encedo-auth-dev.apk | grep -E "^package|native-code|uses-permission" 
+ls -la ~/encedo-auth-dev.apk

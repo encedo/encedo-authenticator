@@ -223,3 +223,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--sealed); ou
 .viewfinder .frame i:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0; }
 .viewfinder .frame i:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0; }
 .viewfinder .hint { position: absolute; bottom: 16px; left: 0; right: 0; text-align: center; font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+
+/* While the barcode scanner runs, the camera preview sits behind the webview:
+   everything on the way to the viewfinder goes transparent. */
+html.scanning, html.scanning body, html.scanning #app, html.scanning .screen, html.scanning .screen-body, html.scanning .viewfinder { background: transparent !important; }
+html.scanning .masthead, html.scanning .page-head, html.scanning .screen-actions { background: var(--ground); }
+html.scanning .page-head { margin: 0 calc(-1 * var(--pad)); padding-left: var(--pad); padding-right: var(--pad); padding-bottom: 12px; }
+.copy { all: unset; cursor: pointer; font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.copy:hover, .copy.done { color: var(--sealed); }

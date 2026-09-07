@@ -1,0 +1,11 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Push token, notification permission and message events."
+permissions = [
+  "allow-get-token",
+  "allow-request-permissions",
+  "allow-check-permissions",
+  "allow-register-listener",
+  "allow-remove-listener",
+]

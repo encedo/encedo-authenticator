@@ -1,0 +1,14 @@
+[package]
+name = "tauri-plugin-encedo-push"
+version = "0.1.0"
+description = "FCM registration and message delivery for the Encedo Authenticator (Android; iOS follows)"
+edition = "2021"
+publish = false
+links = "tauri-plugin-encedo-push"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+tauri = { version = "2" }
+serde = { version = "1", features = ["derive"] }

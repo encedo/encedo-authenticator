@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main window: core IPC only. Native plugins get their own entries as they are added.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

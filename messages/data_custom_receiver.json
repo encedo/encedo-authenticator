@@ -1,7 +1,0 @@
-{
-  "name": "data_custom_receiver",
-  "data" : {
-    "custom": "true",
-    "text": "Custom receiver text"
-  }
-}

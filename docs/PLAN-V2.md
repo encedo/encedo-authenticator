@@ -118,6 +118,10 @@ Razem: 28–42 dni roboczych. Największa wariancja: token FCM na iOS i środowi
 
 ## Styl: tokeny z rkv.pl
 
+Od 7 września 2026 źródłem stylu jest `~/develop/encedo-manager/design/STYLE.md` (ten sam zestaw tokenów
+plus głos: nagłówki jako zdania o stanie, mono dla wartości literalnych, „module” zamiast „device”, brak
+wykrzykników i emoji, sekcja „For the HEM Authenticator specifically”). Tabela poniżej zostaje jako skrót.
+
 Dwa akcenty z gotowym znaczeniem: **sealed** (zieleń) = zweryfikowane, sparowane, Allow; **exposed**
 (rdza) = błąd MAC, wygasłe, odmowa, Deny. Żadnych innych akcentów.
 

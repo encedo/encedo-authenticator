@@ -1,23 +1,33 @@
-# Cordova v1: dependencies and build outputs
+# Node / Vite
 node_modules/
-platforms/
-plugins/
-output/
-*.apk
-*.aab
-.gradle/
+dist/
+vite.config.ts.timestamp-*
 
-# Secrets stay outside the repo (see build.example.json)
+# Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/build/
+src-tauri/gen/android/local.properties
+src-tauri/gen/apple/build/
+src-tauri/gen/apple/Pods/
+src-tauri/gen/apple/xcuserdata/
+src-tauri/gen/apple/*.xcodeproj/project.xcworkspace/xcuserdata/
+src-tauri/gen/apple/*.xcodeproj/xcuserdata/
+
+# Secrets stay outside the repo
 keystore.jks
 build.json
+google-services.json
+GoogleService-Info.plist
+*.p8
+*.p12
+.env
+.env.*
 
 # OS / editors
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
-
-# Tauri v2 (future)
-src-tauri/target/
-src-tauri/gen/schemas/
-dist/

@@ -4,6 +4,7 @@
 //! only ever receives display data and a push token from here.
 
 mod commands;
+pub mod notify;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

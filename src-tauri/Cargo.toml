@@ -17,6 +17,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+encedo-protocol = { version = "0.1.0", path = "crates/protocol" }
+thiserror = "2"
+# reqwest 0.12 with bundled Mozilla roots: no platform trust-store hooks needed on Android/iOS, ring instead of aws-lc (no cmake for the NDK)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json", "http2"] }
+tokio = { version = "1", features = ["time", "macros"] }
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-barcode-scanner = { path = "plugins/barcode-scanner" }

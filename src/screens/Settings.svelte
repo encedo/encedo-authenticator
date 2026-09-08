@@ -16,7 +16,7 @@
   );
   const themes = ["system", "light", "dark"] as const;
   const heading = $derived(
-    app.settings.biometricLock ? "This phone asks who you are before it answers." : "This phone answers without asking who you are.",
+    app.settings.biometric_lock ? "This phone asks who you are before it answers." : "This phone answers without asking who you are.",
   );
 </script>
 
@@ -29,14 +29,14 @@
       <p>Keys stay in the secure element either way. The lock decides who may press Allow.</p>
     </div>
     <div>
-      <Switch label="Lock with biometrics" hint="Face or fingerprint on launch" bind:checked={app.settings.biometricLock} />
-      <Switch label="Lock when in background" hint="Ask again after switching apps" bind:checked={app.settings.lockOnBackground} />
+      <Switch label="Lock with biometrics" hint="Face or fingerprint on launch" bind:checked={app.settings.biometric_lock} onchange={() => app.saveSettings()} />
+      <Switch label="Lock when in background" hint="Ask again after switching apps" bind:checked={app.settings.lock_on_background} onchange={() => app.saveSettings()} />
     </div>
     <div class="field">
       <span class="label">Appearance</span>
       <div class="segmented" role="group" aria-label="Theme">
         {#each themes as t}
-          <button aria-pressed={app.settings.theme === t} onclick={() => (app.settings.theme = t)}>{t}</button>
+          <button aria-pressed={app.settings.theme === t} onclick={() => { app.settings.theme = t; void app.saveSettings(); }}>{t}</button>
         {/each}
       </div>
     </div>
@@ -71,6 +71,7 @@
         <div class="empty">Nothing has arrived while the app was open.</div>
       {/if}
     </div>
+    {#if !inTauri}
     <div class="card">
       <div class="card-head"><span>Mockup</span><span class="v">pretend a push arrived</span></div>
       <ul class="records">
@@ -85,6 +86,7 @@
         <li><button class="rowbtn" onclick={() => app.go({ name: "lock" })}><span class="main"><span class="name">Lock now</span></span></button></li>
       </ul>
     </div>
+    {/if}
     <button class="button plain" onclick={() => app.go({ name: "about" })}>About this app</button>
   </div>
 </div>

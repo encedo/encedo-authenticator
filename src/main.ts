@@ -5,7 +5,7 @@ import { applyDemoParams } from "./lib/demo";
 import { app as state } from "./lib/state.svelte";
 
 applyDemoParams();
-void state.startNative();
+void state.boot();
 
 const app = mount(App, { target: document.getElementById("app")! });
 

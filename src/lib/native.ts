@@ -12,7 +12,8 @@ export interface PushState {
 }
 
 export interface PushMessage {
-  at: string;
+  /** Unix seconds. */
+  at: number;
   title?: string;
   body?: string;
   data: Record<string, unknown>;

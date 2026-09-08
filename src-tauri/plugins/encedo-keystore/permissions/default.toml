@@ -1,0 +1,5 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Wrap and unwrap the storage key. Only Rust calls these; the webview never sees key material."
+permissions = ["allow-wrap", "allow-unwrap"]

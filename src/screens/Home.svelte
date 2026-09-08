@@ -15,11 +15,15 @@
       <p class="eyebrow" class:exposed={!app.online}>Now</p>
       <h1>{heading}</h1>
       {#if app.online}
-        <p>{app.push.status === "registered" ? "Push is registered." : app.push.status === "pending" ? "Push is registering." : "Push is not available here."} {count(app.modules.length, "module")} can ask you.</p>
+        <p>{app.push.status === "registered" ? "Push is registered." : app.push.status === "pending" ? "Push is registering." : "Push is not available here."} {count(app.modules.length, "module")} can ask you.{#if app.busy} Checking the broker…{/if}</p>
       {:else}
         <p>A request cannot be answered until the network is back. The module keeps waiting, then gives up on its own.</p>
       {/if}
     </div>
+
+    {#if app.modules.length && !n}
+      <button class="button plain" disabled={app.busy} onclick={() => app.refresh()}>{app.busy ? "Asking the broker…" : "Check for requests"}</button>
+    {/if}
 
     {#if n}
       <div class="card asking lifted">
@@ -27,7 +31,7 @@
         <ul class="records">
           {#each app.pending as r (r.id)}
             <li><button class="rowbtn" onclick={() => app.go({ name: "request", id: r.id })}>
-              <span class="main"><span class="name">{r.host} wants to {r.phrase}</span><span class="sub">{app.module(r.pid)?.label ?? shortPid(r.pid)} · {r.scope.split("#")[0].slice(0, 28)}</span></span>
+              <span class="main"><span class="name">{r.host} wants to {r.phrase}</span><span class="sub">{r.module_label || shortPid(r.pid)} · {r.scope.split("#")[0].slice(0, 28)}</span></span>
               <svg class="chev" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" /></svg>
             </button></li>
           {/each}
@@ -53,7 +57,7 @@
           {#each recent as e (e.id)}
             <li><div class="row">
               <span class="main"><span class="name">{e.title}</span><span class="sub">{app.module(e.pid)?.label ?? shortPid(e.pid)}{e.detail ? " · " + e.detail : ""}</span></span>
-              <span class="pill" class:sealed={e.outcome === "granted"} class:exposed={e.outcome === "denied" || e.outcome === "error"}><i></i>{e.outcome}</span>
+              <span class="pill" class:sealed={e.outcome === "granted" || e.outcome === "paired"} class:exposed={e.outcome === "denied" || e.outcome === "error" || e.outcome === "rejected"}><i></i>{e.outcome}</span>
             </div></li>
           {/each}
         </ul>
@@ -69,7 +73,7 @@
         {#each app.modules as m (m.pid)}
           <li><button class="rowbtn" onclick={() => app.go({ name: "module", pid: m.pid })}>
             <span class="main"><span class="name">{m.label}</span><span class="sub">{m.host} · pid {shortPid(m.pid)}</span></span>
-            <span class="when">{m.lastUsed ? fmtDateTime(m.lastUsed) : "never used"}</span>
+            <span class="when">{m.last_used ? fmtDateTime(m.last_used) : "never used"}</span>
             <svg class="chev" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" /></svg>
           </button></li>
         {/each}

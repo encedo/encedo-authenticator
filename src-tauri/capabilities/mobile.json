@@ -12,6 +12,7 @@
     "barcode-scanner:allow-open-app-settings",
     "barcode-scanner:allow-set-zoom",
     "barcode-scanner:allow-zoom-range",
-    "encedo-push:default"
+    "encedo-push:default",
+    "encedo-keystore:default"
   ]
 }

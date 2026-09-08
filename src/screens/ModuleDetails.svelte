@@ -14,13 +14,13 @@
       <div class="page-head">
         <p class="eyebrow">Module</p>
         <h1>{m.label} can ask you.</h1>
-        <p>{history.length ? `Last answered ${m.lastUsed ? fmtDateTime(m.lastUsed) : "never"}.` : "This phone has not answered for it yet."}</p>
+        <p>{m.last_used ? `Last answered ${fmtDateTime(m.last_used)}.` : "This phone has not answered for it yet."}</p>
       </div>
       <div class="card">
         <dl class="status-grid">
           <div><dt>Host</dt><dd class="mono">{m.host}</dd></div>
-          <div><dt>Account</dt><dd>{m.email}</dd></div>
-          <div><dt>Paired</dt><dd>{fmtDate(m.pairedAt)}</dd></div>
+          <div><dt>Account</dt><dd>{m.email || m.user || "—"}</dd></div>
+          <div><dt>Paired</dt><dd>{fmtDate(m.paired_at)}</dd></div>
           <div><dt>Answers</dt><dd>{history.length}</dd></div>
           <div class="wide"><dt>pid</dt><dd class="mono">{m.pid}</dd></div>
         </dl>
@@ -33,7 +33,7 @@
     <div class="screen-actions" class:row={confirm}>
       {#if confirm}
         <button class="button plain" onclick={() => (confirm = false)}>Keep</button>
-        <button class="button exposed" onclick={() => app.unpair(pid)}>Unpair now</button>
+        <button class="button exposed" disabled={app.busy} onclick={() => app.unpair(pid)}>{app.busy ? "Unpairing…" : "Unpair now"}</button>
       {:else}
         <button class="button exposed" onclick={() => (confirm = true)}>Unpair this module</button>
       {/if}

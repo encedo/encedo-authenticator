@@ -37,7 +37,7 @@
             <li><div class="row">
               <span class="main"><span class="name">{e.title}</span><span class="sub">{app.module(e.pid)?.label ?? shortPid(e.pid)}{e.detail ? " · " + e.detail : ""}</span></span>
               <span class="main" style="flex:0 0 auto;align-items:flex-end">
-                <span class="pill" class:sealed={e.outcome === "granted"} class:exposed={e.outcome === "denied" || e.outcome === "error"}><i></i>{e.outcome}</span>
+                <span class="pill" class:sealed={e.outcome === "granted" || e.outcome === "paired"} class:exposed={e.outcome === "denied" || e.outcome === "error" || e.outcome === "rejected"}><i></i>{e.outcome}</span>
                 <span class="when">{fmtDateTime(e.at)}</span>
               </span>
             </div></li>

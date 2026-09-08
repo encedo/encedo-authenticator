@@ -7,6 +7,7 @@
 
   let status = $state<"idle" | "scanning" | "denied" | "error">("idle");
   let error = $state("");
+  let pasted = $state("");
   let alive = true;
 
   // The camera's own zoom, where it has one: same plan as encedo-chat
@@ -35,10 +36,6 @@
     await setScanZoom(v);
   }
 
-  function hostOf(raw: string): string {
-    try { return new URL(raw).host; } catch { return raw.slice(0, 40); }
-  }
-
   async function start() {
     status = "scanning";
     void watchZoom();
@@ -46,7 +43,7 @@
       const raw = await scanQr(PREFERRED_START);
       if (!alive) return;
       if (raw === null) { status = "idle"; return; }
-      app.go({ name: "pairConfirm", label: hostOf(raw).split(".")[0] || "New module", host: hostOf(raw), raw });
+      await app.scanned(raw);
     } catch (e) {
       const msg = String(e);
       status = msg.includes("permission") ? "denied" : "error";
@@ -75,6 +72,13 @@
         <h1>Scan the code the Manager shows.</h1>
       {/if}
     </div>
+    {#if !inTauri || status === "error"}
+      <div class="field">
+        <label for="paste">Or paste what the code says</label>
+        <input id="paste" class="mono" bind:value={pasted} placeholder={'{"link":"https://api.encedo.com/…","user":…}'} />
+        <button class="button small" disabled={!pasted.trim() || app.busy} onclick={() => app.scanned(pasted.trim())}>Use this code</button>
+      </div>
+    {/if}
     <div class="viewfinder">
       <div class="frame"><i></i><i></i><i></i><i></i></div>
       {#if zoom && status === "scanning"}
@@ -94,7 +98,7 @@
     {:else if inTauri && status !== "scanning"}
       <button class="button" onclick={start}>Scan again</button>
     {:else if !inTauri}
-      <button class="button" onclick={() => app.go({ name: "pairConfirm", label: "Warehouse PPA", host: "hem-wh.encedo.local", raw: "https://api.encedo.com/notify/pairing/3f9a…?h=…" })}>Simulate a scan</button>
+      <button class="button" onclick={() => app.scanned(JSON.stringify({ link: "https://api.encedo.com/notify/pairing/3f9a…", user: "chris", hostname: "hem-wh.encedo.local", email: "chris@encedo.com" }))}>Simulate a scan</button>
     {/if}
   </div>
 </div>

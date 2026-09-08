@@ -1,5 +1,5 @@
 import { app } from "./state.svelte";
-import type { ScopeKind } from "./types";
+import type { DemoKind } from "./mock";
 
 /** Mockup phase only: `?demo=<screen>&theme=dark` opens a screen directly, for
  *  screenshots and browser previews. Goes away with the mock data. */
@@ -19,7 +19,7 @@ export function openDemo(d: string | null, theme?: string | null) {
     case "modules": app.go({ name: "modules" }); break;
     case "module": app.go({ name: "module", pid: first.pid }); break;
     case "pair": app.go({ name: "pair" }); break;
-    case "pair-confirm": app.go({ name: "pairConfirm", label: "Warehouse PPA", host: "hem-wh.encedo.local" }); break;
+    case "pair-confirm": void app.scanned(JSON.stringify({ link: "https://api.encedo.com/notify/pairing/3f9a…", user: "chris", hostname: "hem-wh.encedo.local", email: "chris@encedo.com" })); break;
     case "archive": app.go({ name: "archive" }); break;
     case "settings": app.go({ name: "settings" }); break;
     case "about": app.go({ name: "about" }); break;
@@ -28,7 +28,7 @@ export function openDemo(d: string | null, theme?: string | null) {
     case "expired": app.go({ name: "result", outcome: "expired", title: "Use the key" }); break;
     case "problem": app.go({ name: "problem", message: "api.encedo.com did not answer within 10 seconds. The request, if any, is still open on the module." }); break;
     default:
-      if (d.startsWith("request-")) app.simulateRequest(d.slice(8) as ScopeKind);
+      if (d.startsWith("request-")) app.simulateRequest(d.slice(8) as DemoKind);
   }
 }
 

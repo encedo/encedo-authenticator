@@ -18,6 +18,9 @@
   const s = $derived(app.screen);
 </script>
 
+{#if !app.ready}
+  <div class="screen"><div class="screen-body centered"><p class="eyebrow muted">Opening</p></div></div>
+{:else}
 {#key s}
   {#if s.name === "welcome"}<Welcome />
   {:else if s.name === "lock"}<Lock />
@@ -25,15 +28,16 @@
   {:else if s.name === "modules"}<Modules />
   {:else if s.name === "module"}<ModuleDetails pid={s.pid} />
   {:else if s.name === "pair"}<Pair />
-  {:else if s.name === "pairConfirm"}<PairConfirm label={s.label} host={s.host} />
+  {:else if s.name === "pairConfirm"}<PairConfirm preview={s.preview} raw={s.raw} />
   {:else if s.name === "request"}<Request id={s.id} />
   {:else if s.name === "result"}<Result outcome={s.outcome} title={s.title} detail={s.detail} />
   {:else if s.name === "archive"}<Archive pid={s.pid} />
   {:else if s.name === "settings"}<Settings />
   {:else if s.name === "about"}<About />
-  {:else if s.name === "problem"}<Problem message={s.message} />
+  {:else if s.name === "problem"}<Problem message={s.message} code={s.code} />
   {/if}
 {/key}
+{/if}
 
 {#if app.tab}
   <Nav />

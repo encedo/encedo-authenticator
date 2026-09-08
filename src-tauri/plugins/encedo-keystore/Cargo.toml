@@ -1,0 +1,15 @@
+[package]
+name = "tauri-plugin-encedo-keystore"
+version = "0.1.0"
+description = "Wraps the storage data key with a hardware-backed AES key in the Android Keystore (iOS Keychain follows)"
+edition = "2021"
+publish = false
+links = "tauri-plugin-encedo-keystore"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+tauri = { version = "2" }
+serde = { version = "1", features = ["derive"] }
+base64 = "0.22"

@@ -18,7 +18,7 @@
           {#each app.modules as m (m.pid)}
             <li><button class="rowbtn" onclick={() => app.go({ name: "module", pid: m.pid })}>
               <span class="main"><span class="name">{m.label}</span><span class="sub">{m.host} · pid {shortPid(m.pid)}</span></span>
-              <span class="when">paired {fmtDate(m.pairedAt)}</span>
+              <span class="when">paired {fmtDate(m.paired_at)}</span>
               <svg class="chev" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" /></svg>
             </button></li>
           {/each}

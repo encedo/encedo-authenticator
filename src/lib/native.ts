@@ -84,7 +84,7 @@ export async function startPush(h: PushHandlers): Promise<PushState> {
   const toMessage = (raw: unknown, tapped = false): PushMessage => {
     const r = (raw ?? {}) as Record<string, unknown>;
     return {
-      at: new Date().toISOString(),
+      at: Math.floor(Date.now() / 1000),
       title: r.title as string | undefined,
       body: r.body as string | undefined,
       data: (r.data as Record<string, unknown>) ?? {},

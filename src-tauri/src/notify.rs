@@ -265,3 +265,24 @@ mod tests {
         assert_eq!(obj.eventid["ev1"], "pid1");
     }
 }
+
+#[cfg(test)]
+mod live {
+    //! Talks to the real broker; run with `cargo test --lib live -- --ignored`.
+    use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn broker_answers_with_typed_errors() {
+        let c = NotifyClient::new(DEFAULT_BASE);
+        // A pairing link that cannot exist: whatever the code, it must be a typed HTTP answer, not a TLS or DNS failure.
+        let r = c.pairing_offer(&format!("{DEFAULT_BASE}/notify/pairing/does-not-exist")).await;
+        eprintln!("pairing_offer: {r:?}");
+        assert!(!matches!(r, Err(NotifyError::Network(_)) | Err(NotifyError::Timeout)), "network layer failed: {r:?}");
+        let r = c.pending(&["AAAA".to_string()]).await;
+        eprintln!("pending: {r:?}");
+        assert!(!matches!(r, Err(NotifyError::Network(_)) | Err(NotifyError::Timeout)), "network layer failed: {r:?}");
+        let r = c.session("AAAA").await;
+        eprintln!("session: {r:?}");
+    }
+}

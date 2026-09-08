@@ -8,6 +8,7 @@
   let status = $state<"idle" | "scanning" | "denied" | "error">("idle");
   let error = $state("");
   let pasted = $state("");
+  let pasting = $state(!inTauri);
   let alive = true;
 
   // The camera's own zoom, where it has one: same plan as encedo-chat
@@ -72,9 +73,9 @@
         <h1>Scan the code the Manager shows.</h1>
       {/if}
     </div>
-    {#if !inTauri || status === "error"}
+    {#if pasting || status === "error" || status === "denied"}
       <div class="field">
-        <label for="paste">Or paste what the code says</label>
+        <label for="paste">Paste what the code says</label>
         <input id="paste" class="mono" bind:value={pasted} placeholder={'{"link":"https://api.encedo.com/…","user":…}'} />
         <button class="button small" disabled={!pasted.trim() || app.busy} onclick={() => app.scanned(pasted.trim())}>Use this code</button>
       </div>
@@ -97,6 +98,8 @@
       <button class="button" onclick={() => openAppSettings()}>Open settings</button>
     {:else if inTauri && status !== "scanning"}
       <button class="button" onclick={start}>Scan again</button>
+    {:else if inTauri && !pasting}
+      <button class="button plain" onclick={async () => { pasting = true; await cancelScan(); status = "idle"; }}>Paste a code</button>
     {:else if !inTauri}
       <button class="button" onclick={() => app.scanned(JSON.stringify({ link: "https://api.encedo.com/notify/pairing/3f9a…", user: "chris", hostname: "hem-wh.encedo.local", email: "chris@encedo.com" }))}>Simulate a scan</button>
     {/if}

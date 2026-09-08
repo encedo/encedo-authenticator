@@ -13,7 +13,7 @@
       <p class="lede">Every request to use a key, unlock a drive or change the module comes here first. Nothing happens until you allow it.</p>
     </div>
     <div>
-      <Switch label="Lock with biometrics" hint="Face or fingerprint on launch" bind:checked={app.settings.biometric_lock} />
+      <Switch label="Lock with biometrics" hint="Face, fingerprint or screen lock on launch and after time away" bind:checked={app.settings.biometric_lock} />
       <Switch label="Lock when in background" hint="Ask again after switching apps" bind:checked={app.settings.lock_on_background} />
     </div>
     <dl>

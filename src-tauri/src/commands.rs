@@ -25,6 +25,13 @@ pub fn app_info() -> AppInfo {
     AppInfo { version: env!("CARGO_PKG_VERSION"), platform: std::env::consts::OS, broker: crate::notify::DEFAULT_BASE.into() }
 }
 
+/// Development aid: a line in logcat (RustStdoutStderr) from the webview,
+/// which has no console of its own in a release build.
+#[tauri::command]
+pub fn trace(msg: String) {
+    eprintln!("[encedo] {msg}");
+}
+
 #[tauri::command]
 pub fn settings_get(core: State<'_, Core>) -> Res<Settings> {
     map(core.settings())

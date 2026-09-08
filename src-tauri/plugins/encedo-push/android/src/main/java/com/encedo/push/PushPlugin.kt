@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import android.webkit.WebView
 import app.tauri.PermissionState
 import app.tauri.annotation.Command
@@ -18,7 +19,8 @@ import com.google.firebase.messaging.RemoteMessage
 
 /**
  * Commands: getToken, requestPermissions, checkPermissions (base class).
- * Events: "token" {token}, "message" {title, body, data}, "tapped" {data}.
+ * Events: "token" {token}, "message" {title, body, data}, "tapped" {data},
+ * "lifecycle" {state: "paused" | "resumed"} (the app lock and the refresh on return hang on it).
  */
 @TauriPlugin(
     permissions = [
@@ -43,6 +45,28 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
 
     override fun onNewIntent(intent: Intent) {
         deliverTap(intent)
+    }
+
+    private var pausedAt = 0L
+
+    // The webview is frozen while the activity is paused, so anything sent on
+    // pause is only read on resume; the time away is therefore measured here.
+    override fun onPause() {
+        pausedAt = System.currentTimeMillis()
+        lifecycle("paused", 0)
+    }
+
+    override fun onResume() {
+        val away = if (pausedAt > 0) System.currentTimeMillis() - pausedAt else 0
+        lifecycle("resumed", away)
+    }
+
+    private fun lifecycle(state: String, awayMs: Long) {
+        Log.i("EncedoPush", "lifecycle $state away=$awayMs listeners=${hasListener("lifecycle")}")
+        val payload = JSObject()
+        payload.put("state", state)
+        payload.put("awayMs", awayMs)
+        trigger("lifecycle", payload)
     }
 
     @Command

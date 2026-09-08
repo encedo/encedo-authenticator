@@ -2,4 +2,4 @@
 
 [default]
 description = "Wrap and unwrap the storage key. Only Rust calls these; the webview never sees key material."
-permissions = ["allow-wrap", "allow-unwrap"]
+permissions = ["allow-wrap", "allow-unwrap", "allow-device-name"]

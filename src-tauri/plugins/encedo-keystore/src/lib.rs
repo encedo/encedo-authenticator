@@ -24,7 +24,25 @@ struct BytesOut {
     data: String,
 }
 
+#[derive(Deserialize)]
+struct NameOut {
+    name: String,
+}
+
 impl<R: Runtime> Keystore<R> {
+    /// Manufacturer and model, e.g. "Samsung SM-S921B".
+    pub fn device_name(&self) -> Result<String, String> {
+        #[cfg(target_os = "android")]
+        {
+            let out: NameOut = self.0.run_mobile_plugin("deviceName", ()).map_err(|e| e.to_string())?;
+            Ok(out.name)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            Err("not available".into())
+        }
+    }
+
     pub fn wrap(&self, key: &[u8]) -> Result<Vec<u8>, String> {
         self.call("wrap", key)
     }

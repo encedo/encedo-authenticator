@@ -4,6 +4,12 @@
 
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/** A line in logcat from the webview (no-op in a browser). */
+export function trace(msg: string) {
+  if (!inTauri) return;
+  void import("@tauri-apps/api/core").then(({ invoke }) => invoke("trace", { msg })).catch(() => {});
+}
+
 export interface PushState {
   status: "unavailable" | "pending" | "registered" | "denied" | "error";
   token?: string;
@@ -71,7 +77,42 @@ export async function openAppSettings() {
 type PushHandlers = {
   onToken: (token: string) => void;
   onMessage: (m: PushMessage) => void;
+  onLifecycle?: (state: "paused" | "resumed", awayMs: number) => void;
 };
+
+export interface BiometricStatus {
+  available: boolean;
+  /** "touch" | "face" | "iris" | "none" */
+  kind: string;
+  error?: string;
+  code?: string;
+}
+
+export async function biometricStatus(): Promise<BiometricStatus> {
+  if (!inTauri) return { available: false, kind: "none", error: "not on a phone" };
+  try {
+    const b = await import("@tauri-apps/plugin-biometric");
+    const s = await b.checkStatus();
+    const kind = s.biometryType === b.BiometryType.FaceID ? "face" : s.biometryType === b.BiometryType.TouchID ? "touch" : s.biometryType === b.BiometryType.Iris ? "iris" : "none";
+    return { available: s.isAvailable, kind, error: s.error, code: s.errorCode };
+  } catch (e) {
+    return { available: false, kind: "none", error: String(e) };
+  }
+}
+
+/** Ask the system to confirm the person; the device PIN/pattern is an accepted fallback. */
+export async function biometricAuth(reason: string): Promise<{ ok: boolean; code?: string; message?: string }> {
+  if (!inTauri) return { ok: true };
+  try {
+    const b = await import("@tauri-apps/plugin-biometric");
+    await b.authenticate(reason, { allowDeviceCredential: true, title: "Encedo Authenticator", subtitle: reason, cancelTitle: "Cancel", confirmationRequired: false });
+    return { ok: true };
+  } catch (e) {
+    const err = e as { code?: string; message?: string } | string;
+    if (typeof err === "string") return { ok: false, message: err };
+    return { ok: false, code: err?.code, message: err?.message ?? String(e) };
+  }
+}
 
 const PUSH = "encedo-push";
 
@@ -95,6 +136,10 @@ export async function startPush(h: PushHandlers): Promise<PushState> {
     await addPluginListener<{ token: string }>(PUSH, "token", ({ token }) => h.onToken(token));
     await addPluginListener(PUSH, "message", (m) => h.onMessage(toMessage(m)));
     await addPluginListener(PUSH, "tapped", (m) => h.onMessage(toMessage(m, true)));
+    await addPluginListener<{ state: "paused" | "resumed"; awayMs: number }>(PUSH, "lifecycle", (ev) => {
+      trace("lifecycle event " + JSON.stringify(ev));
+      try { h.onLifecycle?.(ev.state, ev.awayMs ?? 0); } catch (e) { trace("lifecycle handler failed " + String(e)); }
+    });
   } catch (e) {
     return { status: "error", error: "listeners: " + String(e) };
   }

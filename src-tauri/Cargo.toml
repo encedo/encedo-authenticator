@@ -30,6 +30,7 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 tauri-plugin-barcode-scanner = { path = "plugins/barcode-scanner" }
 tauri-plugin-encedo-push = { path = "plugins/encedo-push" }
 tauri-plugin-encedo-keystore = { path = "plugins/encedo-keystore" }
+tauri-plugin-biometric = "2"
 
 [profile.release]
 codegen-units = 1

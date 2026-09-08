@@ -6,6 +6,7 @@
   import { copyText, inTauri } from "../lib/native";
   import { fmtDateTime } from "../lib/state.svelte";
   let copied = $state(false);
+  let lockNote = $state<string | null>(null);
   async function copyToken() {
     if (!app.push.token) return;
     copied = await copyText(app.push.token);
@@ -29,7 +30,7 @@
       <p>Keys stay in the secure element either way. The lock decides who may press Allow.</p>
     </div>
     <div>
-      <Switch label="Lock with biometrics" hint="Face or fingerprint on launch" bind:checked={app.settings.biometric_lock} onchange={() => app.saveSettings()} />
+      <Switch label="Lock with biometrics" hint={lockNote ?? "Face, fingerprint or screen lock on launch"} bind:checked={app.settings.biometric_lock} onchange={async () => { lockNote = await app.setBiometricLock(app.settings.biometric_lock); }} />
       <Switch label="Lock when in background" hint="Ask again after switching apps" bind:checked={app.settings.lock_on_background} onchange={() => app.saveSettings()} />
     </div>
     <div class="field">

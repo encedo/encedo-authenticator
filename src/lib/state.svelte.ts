@@ -1,6 +1,6 @@
 import type { Settings } from "./api";
 import { api, ApiError, type AnswerView, type ArchiveEntry, type ModuleView, type Outcome, type PairingPreview, type RequestView } from "./api";
-import { inTauri, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
+import { biometricAuth, inTauri, trace, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
 import * as mock from "./mock";
 
 export type Screen =
@@ -44,6 +44,11 @@ class AppState {
   push = $state<PushState>({ status: inTauri ? "pending" : "unavailable" });
   pushLog = $state<PushMessage[]>([]);
   ready = $state(!inTauri);
+  /** Lock screen state. */
+  unlocking = $state(false);
+  lockError = $state<{ code?: string; message: string } | null>(null);
+  private returnTo: Screen | null = null;
+  private static readonly LOCK_AFTER_MS = 5000;
 
   constructor() {
     $effect.root(() => {
@@ -62,6 +67,14 @@ class AppState {
   /** Load everything from the Rust core, then start push. Called once at launch. */
   async boot() {
     if (!inTauri) return;
+    trace("boot");
+    // Second source of the same signal, independent of the plugin channel:
+    // the WebView reports page visibility when the app leaves the screen.
+    let hiddenAt = 0;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") { hiddenAt = Date.now(); trace("visibility hidden"); }
+      else { const away = hiddenAt ? Date.now() - hiddenAt : 0; hiddenAt = 0; trace(`visibility visible away=${away}`); this.onLifecycle("resumed", away); }
+    });
     try {
       const [settings, modules, archive] = await Promise.all([api.settingsGet(), api.modules(), api.archive()]);
       this.settings = settings;
@@ -76,6 +89,7 @@ class AppState {
     this.push = await startPush({
       onToken: (token) => { this.push = { ...this.push, status: "registered", token }; void api.pushTokenChanged(token).catch(() => {}); },
       onMessage: (m) => { this.pushLog = [m, ...this.pushLog].slice(0, 20); void this.onPush(m); },
+      onLifecycle: (state, awayMs) => this.onLifecycle(state, awayMs),
     });
     if (this.push.token) void api.pushTokenChanged(this.push.token).catch(() => {});
     if (this.settings.onboarded && !this.settings.biometric_lock) void this.refresh();
@@ -118,6 +132,7 @@ class AppState {
 
   async finishOnboarding() {
     this.settings.onboarded = true;
+    if (this.settings.biometric_lock) await this.setBiometricLock(true);
     await this.saveSettings();
     this.screen = { name: "home" };
     void this.askPushPermission();
@@ -134,10 +149,74 @@ class AppState {
     }
   }
 
+  /** Activity pause/resume from the native side; `awayMs` is measured there,
+   *  because the webview only wakes up to read these on resume. */
+  onLifecycle(state: "paused" | "resumed", awayMs: number) {
+    trace(`lifecycle ${state} away=${awayMs} screen=${this.screen.name} unlocking=${this.unlocking} lock=${this.settings.biometric_lock}/${this.settings.lock_on_background} onboarded=${this.settings.onboarded}`);
+    if (state === "paused") return;
+    if (this.unlocking) return; // the biometric prompt itself pauses the activity
+    const away = awayMs;
+    const mustLock = this.settings.onboarded && this.settings.biometric_lock && this.settings.lock_on_background && away >= AppState.LOCK_AFTER_MS;
+    if (mustLock && this.screen.name !== "lock" && this.screen.name !== "welcome") this.lockNow();
+    else if (this.settings.onboarded && this.screen.name !== "lock" && this.screen.name !== "welcome") void this.refresh();
+  }
+
+  lockNow() {
+    const s = this.screen;
+    if (s.name === "lock") return;
+    this.returnTo = s.name === "welcome" || s.name === "problem" || s.name === "pair" ? null : s;
+    this.lockError = null;
+    this.screen = { name: "lock" };
+  }
+
+  /** Confirm the person with biometrics or the device credential, then carry on. */
   async unlock() {
-    // Biometric prompt lands in Phase 5; for now unlocking is a tap.
-    this.screen = { name: "home" };
-    await this.refresh();
+    if (this.unlocking) return;
+    if (!inTauri || !this.settings.biometric_lock) { this.leaveLock(); return; }
+    this.unlocking = true;
+    this.lockError = null;
+    try {
+      const r = await biometricAuth("Confirm it is you");
+      if (r.ok) { this.leaveLock(); return; }
+      if (r.code === "biometryNotEnrolled" || r.code === "noDeviceCredential" || r.code === "passcodeNotSet") {
+        // Nothing on this phone can confirm the person: the lock cannot hold.
+        this.settings.biometric_lock = false;
+        await this.saveSettings();
+        this.lockError = { code: r.code, message: "No screen lock is set on this phone, so the app lock was turned off." };
+        return;
+      }
+      this.lockError = { code: r.code, message: r.message ?? "Not confirmed." };
+    } finally {
+      this.unlocking = false;
+    }
+  }
+
+  private leaveLock() {
+    this.screen = this.returnTo ?? { name: "home" };
+    this.returnTo = null;
+    void this.refresh(this.screen.name === "home");
+  }
+
+  /** Turning the lock on means confirming once, with biometrics or the screen
+   *  lock; a phone with neither cannot hold a lock. Returns a message when it cannot. */
+  async setBiometricLock(on: boolean): Promise<string | null> {
+    if (on && inTauri) {
+      this.unlocking = true; // the prompt pauses the activity; do not treat the return as "came back"
+      try {
+        const r = await biometricAuth("Confirm to turn the lock on");
+        if (!r.ok) {
+          this.settings.biometric_lock = false;
+          await this.saveSettings();
+          if (r.code === "noDeviceCredential" || r.code === "passcodeNotSet" || r.code === "biometryNotEnrolled") return "This phone has no screen lock, so the app cannot lock itself. Set one in the system settings first.";
+          return r.message ?? "Not confirmed; the lock stays off.";
+        }
+      } finally {
+        this.unlocking = false;
+      }
+    }
+    this.settings.biometric_lock = on;
+    await this.saveSettings();
+    return null;
   }
 
   module(pid: string): ModuleView | undefined { return this.modules.find((m) => m.pid === pid); }

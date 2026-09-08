@@ -1,6 +1,7 @@
 package com.encedo.keystore
 
 import android.app.Activity
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -53,6 +54,17 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
     private fun reply(invoke: Invoke, bytes: ByteArray) {
         val out = JSObject()
         out.put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))
+        invoke.resolve(out)
+    }
+
+    /** What the Manager shows as the paired phone's label. */
+    @Command
+    fun deviceName(invoke: Invoke) {
+        val out = JSObject()
+        val model = Build.MODEL ?: ""
+        val maker = Build.MANUFACTURER ?: ""
+        val name = if (model.lowercase().startsWith(maker.lowercase())) model else "$maker $model"
+        out.put("name", name.trim().replaceFirstChar { it.uppercase() })
         invoke.resolve(out)
     }
 

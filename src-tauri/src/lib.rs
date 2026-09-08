@@ -64,17 +64,20 @@ mod android {
     }
 }
 
-fn device_name() -> String {
+fn device_name(app: &tauri::AppHandle) -> String {
     #[cfg(target_os = "android")]
     {
-        "Android phone".to_string()
+        use tauri_plugin_encedo_keystore::KeystoreExt;
+        app.keystore().device_name().unwrap_or_else(|_| "Android phone".to_string())
     }
     #[cfg(target_os = "ios")]
     {
+        let _ = app;
         "iPhone".to_string()
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
+        let _ = app;
         format!("{} desktop", std::env::consts::OS)
     }
 }
@@ -86,18 +89,21 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_barcode_scanner::init())
         .plugin(tauri_plugin_encedo_push::init())
-        .plugin(tauri_plugin_encedo_keystore::init());
+        .plugin(tauri_plugin_encedo_keystore::init())
+        .plugin(tauri_plugin_biometric::init());
     builder
         .setup(|app| {
             let data_dir: PathBuf = app.path().app_data_dir().expect("app data dir");
             let secrets = secret_store(app.handle(), &data_dir);
             let store = Store::open(data_dir.join("store.bin"), secrets.as_ref())?;
             let client = NotifyClient::new(std::env::var("ENCEDO_BROKER").as_deref().unwrap_or(notify::DEFAULT_BASE));
-            app.manage(Core::new(store, client, device_name()));
+            let name = device_name(app.handle());
+            app.manage(Core::new(store, client, name));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
+            commands::trace,
             commands::settings_get,
             commands::settings_set,
             commands::modules_list,

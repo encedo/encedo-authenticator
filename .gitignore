@@ -33,3 +33,7 @@ GoogleService-Info.plist
 Thumbs.db
 .idea/
 .vscode/
+
+# Nested crates build into their own target dirs when tested alone
+src-tauri/crates/*/target/
+src-tauri/plugins/*/target/

@@ -1,0 +1,20 @@
+[package]
+name = "encedo-protocol"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Encedo notify protocol as spoken by the v1 app: X25519, HMAC-SHA256, AES-128-CBC, JWT HS256"
+
+[dependencies]
+x25519-dalek = { version = "2", features = ["static_secrets", "zeroize"] }
+hmac = "0.12"
+sha2 = "0.10"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc", "block-padding"] }
+base64 = "0.22"
+subtle = "2"
+zeroize = { version = "1", features = ["derive"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+rand_core = { version = "0.6", features = ["getrandom"] }

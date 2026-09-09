@@ -1,5 +1,5 @@
 import type { Settings } from "./api";
-import { api, ApiError, type AnswerView, type ArchiveEntry, type ModuleView, type Outcome, type PairingPreview, type RequestView } from "./api";
+import { api, ApiError, type AnswerView, type ArchiveEntry, type ModuleView, type Outcome, type PairingPreview, type RefreshReport, type RequestView } from "./api";
 import { biometricAuth, inTauri, trace, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
 import * as mock from "./mock";
 
@@ -41,6 +41,7 @@ class AppState {
   online = $state(true);
   busy = $state(false);
   lastError = $state<string | null>(null);
+  lastRefresh = $state<RefreshReport | null>(null);
   push = $state<PushState>({ status: inTauri ? "pending" : "unavailable" });
   pushLog = $state<PushMessage[]>([]);
   ready = $state(!inTauri);
@@ -236,9 +237,11 @@ class AppState {
       this.online = true;
       this.pending = list;
       this.archive = await api.archive();
+      this.lastRefresh = await api.lastRefresh().catch(() => null);
       if (show && list.length && this.screen.name !== "request") this.screen = { name: "request", id: list[0].id };
     } catch (e) {
       const err = e as ApiError;
+      this.lastRefresh = await api.lastRefresh().catch(() => null);
       if (err.code === "network" || err.code === "timeout" || err.code === "unavailable") this.online = false;
       else this.fail(e);
     } finally {

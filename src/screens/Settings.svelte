@@ -57,6 +57,21 @@
         <div class="status-note">Paste the token into Firebase console, Messaging, Send test message. A message with a title shows as a system notification; the app lists what it received below.</div>
       {/if}
     </div>
+    {#if inTauri}
+    <div class="card" class:exposed={!!app.lastRefresh?.error}>
+      <div class="card-head"><span>Broker check</span><span class="v">{app.lastRefresh ? fmtDateTime(app.lastRefresh.at) : "not yet"}</span></div>
+      {#if app.lastRefresh}
+        <dl class="status-grid">
+          <div><dt>Asked for</dt><dd class="mono">{app.lastRefresh.pids.length ? app.lastRefresh.pids.join(" ") : "no modules"}</dd></div>
+          <div><dt>Pending / shown</dt><dd>{app.lastRefresh.pending} / {app.lastRefresh.shown}</dd></div>
+          <div class="wide"><dt>Broker said</dt><dd class="mono" style="font-size:11.5px">{app.lastRefresh.broker_said || "—"}</dd></div>
+          {#if app.lastRefresh.discarded.length}<div class="wide"><dt>Discarded</dt><dd class="mono" style="font-size:11.5px">{app.lastRefresh.discarded.join(" · ")}</dd></div>{/if}
+          {#if app.lastRefresh.error}<div class="wide"><dt>Error</dt><dd class="risk">{app.lastRefresh.error}</dd></div>{/if}
+        </dl>
+      {/if}
+      <div class="card-foot"><span>allbypid</span><button class="button quiet small" disabled={app.busy} onclick={() => app.refresh(false)}>Check now</button></div>
+    </div>
+    {/if}
     <div class="card">
       <div class="card-head"><span>Push received</span><span class="v">{app.pushLog.length}</span></div>
       {#if app.pushLog.length}

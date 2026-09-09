@@ -102,6 +102,19 @@ pub struct RequestView {
     pub view: ScopeView,
 }
 
+/// What the last broker check did; shown on the Settings screen so a field
+/// test can be read without adb.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct RefreshReport {
+    pub at: u64,
+    pub pids: Vec<String>,
+    pub broker_said: String,
+    pub pending: usize,
+    pub shown: usize,
+    pub discarded: Vec<String>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AnswerView {
     pub outcome: Outcome,
@@ -130,11 +143,12 @@ pub struct Core {
     live: Mutex<HashMap<String, LiveRequest>>,
     /// Device name for the pairing label, from the OS.
     device_name: String,
+    last_refresh: Mutex<RefreshReport>,
 }
 
 impl Core {
     pub fn new(store: Store, client: NotifyClient, device_name: String) -> Self {
-        Self { store: Mutex::new(store), client, pairing: Mutex::new(None), live: Mutex::new(HashMap::new()), device_name }
+        Self { store: Mutex::new(store), client, pairing: Mutex::new(None), live: Mutex::new(HashMap::new()), device_name, last_refresh: Mutex::new(RefreshReport::default()) }
     }
 
     fn with_store<T>(&self, f: impl FnOnce(&mut Store) -> Result<T, StoreError>) -> Result<T, CoreError> {
@@ -169,6 +183,10 @@ impl Core {
 
     pub fn archive_list(&self) -> Result<Vec<ArchiveEntry>, CoreError> {
         self.with_store(|s| Ok(s.data.archive.clone()))
+    }
+
+    pub fn last_refresh(&self) -> RefreshReport {
+        self.last_refresh.lock().map(|r| r.clone()).unwrap_or_default()
     }
 
     pub fn push_token(&self) -> Result<Option<String>, CoreError> {
@@ -253,10 +271,22 @@ impl Core {
     /// discard what expired or fails its MAC, and return what needs an answer.
     pub async fn refresh(&self) -> Result<Vec<RequestView>, CoreError> {
         let (pids, handled) = self.with_store(|s| Ok((s.data.modules.iter().map(|m| m.pid.clone()).collect::<Vec<_>>(), s.data.handled_events.clone())))?;
-        let pending = self.client.pending(&pids).await?;
+        let mut report = RefreshReport { at: now(), pids: pids.iter().map(|p| crate::core::short(p)).collect(), ..Default::default() };
+        let (pending, raw) = match self.client.pending(&pids).await {
+            Ok(x) => x,
+            Err(e) => {
+                report.error = Some(e.to_string());
+                if let Ok(mut r) = self.last_refresh.lock() { *r = report; }
+                return Err(e.into());
+            }
+        };
+        report.broker_said = raw.chars().take(400).collect();
+        report.pending = pending.len();
+        eprintln!("[encedo] allbypid for {} pid(s): {}", pids.len(), report.broker_said);
         let mut out = Vec::new();
         for p in pending {
             if handled.contains(&p.event_id) {
+                report.discarded.push(format!("{}: already handled", short(&p.event_id)));
                 continue;
             }
             if let Some(v) = self.live.lock().ok().and_then(|l| l.get(&p.event_id).map(|r| self.view_of(&p.event_id, r))) {
@@ -268,16 +298,25 @@ impl Core {
                 Err(CoreError::Notify(NotifyError::Expired)) | Err(CoreError::Protocol(encedo_protocol::Error::Expired)) => {
                     let _ = self.client.deny(&p.event_id, &p.pid).await;
                     self.discard(&p.event_id, &p.pid, "Request", "expired before it was shown", Outcome::Expired)?;
+                    report.discarded.push(format!("{}: expired", short(&p.event_id)));
                 }
                 Err(CoreError::Protocol(encedo_protocol::Error::BadMac)) => {
                     self.discard(&p.event_id, &p.pid, "Request", "rejected: scope MAC did not verify", Outcome::Rejected)?;
+                    report.discarded.push(format!("{}: bad scope MAC", short(&p.event_id)));
                 }
                 Err(CoreError::Notify(NotifyError::HandledElsewhere)) | Err(CoreError::Notify(NotifyError::Cancelled)) => {
                     self.discard(&p.event_id, &p.pid, "Request", "answered elsewhere or withdrawn", Outcome::Cancelled)?;
+                    report.discarded.push(format!("{}: gone (410)", short(&p.event_id)));
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    report.error = Some(format!("{}: {e}", short(&p.event_id)));
+                    if let Ok(mut r) = self.last_refresh.lock() { *r = report; }
+                    return Err(e);
+                }
             }
         }
+        report.shown = out.len();
+        if let Ok(mut r) = self.last_refresh.lock() { *r = report; }
         Ok(out)
     }
 
@@ -395,6 +434,11 @@ impl Core {
         }
         self.with_store(|s| s.update(|d| d.push_token = Some(fid.to_string())))
     }
+}
+
+/// First and last four characters, enough to tell ids apart in a report.
+pub fn short(s: &str) -> String {
+    if s.len() <= 12 { s.to_string() } else { format!("{}…{}", &s[..4], &s[s.len() - 4..]) }
 }
 
 pub fn period_label(secs: u64) -> String {

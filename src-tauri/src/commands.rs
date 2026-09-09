@@ -4,7 +4,7 @@
 use serde::Serialize;
 use tauri::State;
 
-use crate::core::{AnswerView, Core, ErrorView, ModuleView, PairingPreview, RequestView};
+use crate::core::{AnswerView, Core, ErrorView, ModuleView, PairingPreview, RefreshReport, RequestView};
 use crate::store::{ArchiveEntry, Settings};
 
 type Res<T> = Result<T, ErrorView>;
@@ -68,6 +68,11 @@ pub async fn pair_confirm(core: State<'_, Core>, label: String, fid: Option<Stri
 pub async fn pair_refuse(core: State<'_, Core>, fid: Option<String>) -> Res<()> {
     let fid = fid.or(map(core.push_token())?).unwrap_or_else(|| "no-push-token".into());
     map(core.pair_refuse(&fid).await)
+}
+
+#[tauri::command]
+pub fn last_refresh(core: State<'_, Core>) -> RefreshReport {
+    core.last_refresh()
 }
 
 #[tauri::command]

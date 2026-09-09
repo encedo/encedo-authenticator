@@ -15,6 +15,7 @@ export interface ArchiveEntry { id: string; pid: string; title: string; detail: 
 export interface AnswerView { outcome: Outcome; title: string; detail: string }
 export interface Settings { biometric_lock: boolean; lock_on_background: boolean; theme: "system" | "light" | "dark"; onboarded: boolean }
 export interface AppInfo { version: string; platform: string; broker: string }
+export interface RefreshReport { at: number; pids: string[]; broker_said: string; pending: number; shown: number; discarded: string[]; error: string | null }
 
 export class ApiError extends Error {
   code: string;
@@ -42,6 +43,7 @@ export const api = {
   pairConfirm: (label: string, fid?: string) => call<ModuleView>("pair_confirm", { label, fid }),
   pairRefuse: (fid?: string) => call<void>("pair_refuse", { fid }),
   refresh: () => call<RequestView[]>("requests_refresh"),
+  lastRefresh: () => call<RefreshReport>("last_refresh"),
   allow: (id: string, periodSecs: number, writable: boolean) => call<AnswerView>("request_allow", { id, periodSecs, writable }),
   deny: (id: string) => call<AnswerView>("request_deny", { id }),
   unpair: (pid: string) => call<void>("module_unpair", { pid }),

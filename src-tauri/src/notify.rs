@@ -172,18 +172,25 @@ impl NotifyClient {
 
     // ---- events ----------------------------------------------------------
 
-    pub async fn pending(&self, pids: &[String]) -> Result<Vec<PendingEvent>, NotifyError> {
+    /// Returns the pending events and the broker's raw answer (for the diagnostics card).
+    pub async fn pending(&self, pids: &[String]) -> Result<(Vec<PendingEvent>, String), NotifyError> {
         if pids.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), String::from("(no modules paired, broker not asked)")));
         }
-        let raw: AllByPidRaw = self.json(Method::POST, &self.url("/notify/event/data/allbypid"), Some(&PidsBody { pid: pids })).await?;
+        let text = self.text(Method::POST, &self.url("/notify/event/data/allbypid"), Some(&PidsBody { pid: pids })).await?;
+        let raw: AllByPidRaw = serde_json::from_str(&text).map_err(|e| NotifyError::BadResponse(format!("{e}: {}", text.chars().take(120).collect::<String>())))?;
         let map: HashMap<String, String> = match raw.eventid {
-            serde_json::Value::Object(m) => m.into_iter().filter_map(|(k, v)| v.as_str().map(|p| (k, p.to_string()))).collect(),
+            // v1 did String(value): accept anything scalar as the pid.
+            serde_json::Value::Object(m) => m.into_iter().filter_map(|(k, v)| match v {
+                serde_json::Value::String(p) => Some((k, p)),
+                serde_json::Value::Number(n) => Some((k, n.to_string())),
+                _ => None,
+            }).collect(),
             _ => HashMap::new(),
         };
         let mut out: Vec<PendingEvent> = map.into_iter().map(|(event_id, pid)| PendingEvent { event_id, pid }).collect();
         out.sort_by(|a, b| a.event_id.cmp(&b.event_id));
-        Ok(out)
+        Ok((out, text))
     }
 
     fn event_url(&self, event_id: &str, pid: &str) -> String {
@@ -247,9 +254,13 @@ impl NotifyClient {
         })
     }
 
-    async fn json<B: Serialize, T: DeserializeOwned>(&self, method: Method, url: &str, body: Option<&B>) -> Result<T, NotifyError> {
+    async fn text<B: Serialize>(&self, method: Method, url: &str, body: Option<&B>) -> Result<String, NotifyError> {
         let resp = self.send(method, url, body).await?;
-        let text = resp.text().await.map_err(|e| NotifyError::Network(e.to_string()))?;
+        resp.text().await.map_err(|e| NotifyError::Network(e.to_string()))
+    }
+
+    async fn json<B: Serialize, T: DeserializeOwned>(&self, method: Method, url: &str, body: Option<&B>) -> Result<T, NotifyError> {
+        let text = self.text(method, url, body).await?;
         serde_json::from_str(&text).map_err(|e| NotifyError::BadResponse(format!("{e}: {}", text.chars().take(120).collect::<String>())))
     }
 }

@@ -118,6 +118,7 @@ pub fn run() {
             commands::pair_confirm,
             commands::pair_refuse,
             commands::requests_refresh,
+            commands::last_refresh,
             commands::request_allow,
             commands::request_deny,
             commands::module_unpair,

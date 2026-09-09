@@ -73,10 +73,17 @@ pub struct PairingCode {
 }
 
 impl PairingCode {
+    /// v1 Manager: JSON `{link, user, hostname, email}`. A bare https link is
+    /// accepted too, so a future Manager that encodes only the link still pairs.
     pub fn parse(raw: &str) -> Result<Self, NotifyError> {
-        let code: PairingCode = serde_json::from_str(raw).map_err(|e| NotifyError::BadResponse(format!("QR code: {e}")))?;
+        let raw = raw.trim();
+        let code: PairingCode = if raw.starts_with("https://") {
+            PairingCode { link: raw.to_string(), user: String::new(), hostname: String::new(), email: String::new() }
+        } else {
+            serde_json::from_str(raw).map_err(|_| NotifyError::BadResponse("this code is not an Encedo pairing code".into()))?
+        };
         if !code.link.starts_with("https://") {
-            return Err(NotifyError::BadResponse("QR code link is not https".into()));
+            return Err(NotifyError::BadResponse("the pairing link is not https".into()));
         }
         Ok(code)
     }
@@ -254,6 +261,9 @@ mod tests {
         let c = PairingCode::parse(r#"{"link":"https://api.encedo.com/notify/pairing/abc","user":"chris","hostname":"my.ence.do"}"#).unwrap();
         assert_eq!(c.hostname, "my.ence.do");
         assert_eq!(c.email, "");
+        let bare = PairingCode::parse(" https://api.encedo.com/notify/pairing/abc \n").unwrap();
+        assert_eq!(bare.link, "https://api.encedo.com/notify/pairing/abc");
+        assert!(PairingCode::parse("hello").is_err());
     }
 
     #[tokio::test]

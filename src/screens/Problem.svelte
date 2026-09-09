@@ -2,7 +2,7 @@
   import { app } from "../lib/state.svelte";
   let { message, code }: { message: string; code?: string } = $props();
   const head = $derived(
-    code === "network" || code === "timeout" || code === "unavailable" ? "The broker could not be reached." : code === "storage" ? "The phone's storage could not be opened." : code === "unauthorized" ? "The broker refused this pairing." : "The operation stopped.",
+    code === "network" || code === "timeout" || code === "unavailable" ? "The broker could not be reached." : code === "storage" ? "The phone's storage could not be opened." : code === "unauthorized" ? "The broker refused this pairing." : code === "rejected" ? "The broker refused this." : code === "bad_response" ? "That code could not be used." : "The operation stopped.",
   );
 </script>
 

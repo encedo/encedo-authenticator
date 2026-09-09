@@ -173,7 +173,12 @@ impl Core {
 
     pub async fn pair_scan(&self, raw: &str) -> Result<PairingPreview, CoreError> {
         let code = PairingCode::parse(raw)?;
-        let offer = self.client.pairing_offer(&code.link).await?;
+        let offer = match self.client.pairing_offer(&code.link).await {
+            Ok(o) => o,
+            // The Manager shows the code for a short time; past that the broker no longer knows the link.
+            Err(NotifyError::Expired) => return Err(CoreError::Notify(NotifyError::Rejected(404, "the pairing code has expired; show a fresh one in the Manager".into()))),
+            Err(e) => return Err(e.into()),
+        };
         let request = PairingRequest::from_jwt(&offer.request)?;
         let already = self.with_store(|s| Ok(s.data.modules.iter().any(|m| m.eid == request.iss)))?;
         let preview = PairingPreview { link: code.link.clone(), user: code.user.clone(), hostname: code.hostname.clone(), email: code.email.clone(), issuer: offer.ipinfo_eid.clone(), already_paired: already };

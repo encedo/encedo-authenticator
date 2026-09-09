@@ -13,6 +13,7 @@ use encedo_protocol::unpair;
 use rand_core::{OsRng, RngCore};
 use serde::Serialize;
 
+use crate::diag::{brief, log};
 use crate::notify::{NotifyClient, NotifyError, PairingCode};
 use crate::scope::{describe, ScopeView};
 use crate::store::{ArchiveEntry, ModuleRecord, Outcome, Settings, Store, StoreError};
@@ -197,6 +198,7 @@ impl Core {
 
     pub async fn pair_scan(&self, raw: &str) -> Result<PairingPreview, CoreError> {
         let code = PairingCode::parse(raw)?;
+        log(format!("pair: code link={} host={} user={} hash={}", brief(&code.link, 24), code.hostname, code.user, brief(&code.hash, 6)));
         let offer = match self.client.pairing_offer(&code.link).await {
             Ok(o) => o,
             // The Manager shows the code for a short time; past that the broker no longer knows the link.
@@ -212,6 +214,7 @@ impl Core {
             }
         }
         let request = PairingRequest::from_jwt(&offer.request)?;
+        log(format!("pair: offer jti={} exp={:?} iss={} aud={} ipinfo={:?}", brief(&request.jti, 6), request.exp, brief(&request.iss, 6), brief(&request.aud, 6), offer.ipinfo_eid));
         if request.expired(now()) {
             return Err(CoreError::Notify(NotifyError::Rejected(410, "the pairing request has expired; show a fresh code in the Manager".into())));
         }
@@ -229,13 +232,16 @@ impl Core {
         let p = self.take_pairing()?;
         let app = KeyPair::generate();
         let reply = pairing::reply(&p.request, &app, &self.device_name, fid)?;
+        log(format!("pair: POST link label={:?} fid={} aid={} mac={} reply={}", self.device_name, brief(fid, 8), brief(&reply.aid, 6), brief(&reply.mac, 6), brief(&reply.reply, 12)));
         let paired = match self.client.pairing_accept(&p.code.link, &reply).await {
             Ok(x) => x,
             Err(e) => {
+                log(format!("pair: POST link failed: {e}"));
                 self.archive("", "Pair this phone", &format!("{}: {}", p.code.hostname, e), Outcome::Error)?;
                 return Err(e.into());
             }
         };
+        log(format!("pair: broker answered pid={}", brief(&paired.pid, 8)));
         let label = if label.trim().is_empty() { p.code.hostname.clone() } else { label.trim().to_string() };
         let record = ModuleRecord {
             pid: paired.pid.clone(),
@@ -282,7 +288,7 @@ impl Core {
         };
         report.broker_said = raw.chars().take(400).collect();
         report.pending = pending.len();
-        eprintln!("[encedo] allbypid for {} pid(s): {}", pids.len(), report.broker_said);
+        log(format!("allbypid for {} pid(s) [{}]: {}", pids.len(), report.pids.join(" "), report.broker_said));
         let mut out = Vec::new();
         for p in pending {
             if handled.contains(&p.event_id) {
@@ -323,6 +329,7 @@ impl Core {
     async fn open(&self, event_id: &str, pid: &str) -> Result<RequestView, CoreError> {
         let module = self.with_store(|s| Ok(s.data.module(pid).cloned()))?.ok_or_else(|| CoreError::State(format!("unknown pid {pid}")))?;
         let event = self.client.event(event_id, pid).await?;
+        log(format!("event {}: jti={} exp={} epk={} scope={}", brief(event_id, 6), brief(&event.jti, 6), event.exp, brief(&event.epk, 6), brief(&event.scope, 12)));
         let app = KeyPair::from_secret(b64_decode_32(&module.aid_prv).ok_or(CoreError::State("bad aid_prv".into()))?);
         let eid = b64_decode_32(&module.eid).ok_or(CoreError::State("bad eid".into()))?;
         let opened = event::open_scope(&event, &app, &eid, now())?;
@@ -359,6 +366,7 @@ impl Core {
         let reply = event::allow(&r.event, &app, &module.eid, &module.pid, &r.scope, writable, now(), period)?;
         let detail = format!("{} · {}", reply.scope, period_label(period));
         let result = self.client.allow(id, &r.pid, &reply).await;
+        log(format!("allow {} scope={} period={}: {:?}", brief(id, 6), reply.scope, period, result));
         self.with_store(|s| s.update(|d| { d.mark_handled(id); if let Some(m) = d.modules.iter_mut().find(|m| m.pid == r.pid) { m.last_used = Some(now()); } }))?;
         self.finish(&r, result, &detail, Outcome::Granted)
     }
@@ -366,6 +374,7 @@ impl Core {
     pub async fn deny(&self, id: &str) -> Result<AnswerView, CoreError> {
         let r = self.take_live(id)?;
         let result = self.client.deny(id, &r.pid).await;
+        log(format!("deny {}: {:?}", brief(id, 6), result));
         self.with_store(|s| s.update(|d| d.mark_handled(id)))?;
         self.finish(&r, result, &r.scope.clone(), Outcome::Denied)
     }
@@ -387,12 +396,25 @@ impl Core {
     pub async fn unpair(&self, pid: &str) -> Result<(), CoreError> {
         let module = self.with_store(|s| Ok(s.data.module(pid).cloned()))?.ok_or_else(|| CoreError::State("module gone".into()))?;
         let app = KeyPair::from_secret(b64_decode_32(&module.aid_prv).ok_or(CoreError::State("bad aid_prv".into()))?);
-        let session = self.client.session(&module.aid).await?;
+        let session = match self.client.session(&module.aid).await {
+            Ok(s) => s,
+            Err(e) => { log(format!("unpair {}: session failed: {e}", brief(pid, 8))); return Err(e.into()); }
+        };
         let mut nonce = [0u8; 32];
         OsRng.fill_bytes(&mut nonce);
         let body = unpair::delete_body(pid, &session.epk, &app, &nonce)?;
-        self.client.unsubscribe(&body).await?;
+        if let Err(e) = self.client.unsubscribe(&body).await {
+            log(format!("unpair {}: subscribers/delete failed: {e}", brief(pid, 8)));
+            return Err(e.into());
+        }
+        log(format!("unpair {}: broker ok", brief(pid, 8)));
         self.remove_module(pid, "unpaired from this phone")
+    }
+
+    /// Drop the module locally without the broker's agreement (it said 404, or is unreachable).
+    pub fn forget(&self, pid: &str) -> Result<(), CoreError> {
+        log(format!("forget {}: removed locally only", brief(pid, 8)));
+        self.remove_module(pid, "removed from this phone only; the broker did not confirm")
     }
 
     fn remove_module(&self, pid: &str, why: &str) -> Result<(), CoreError> {

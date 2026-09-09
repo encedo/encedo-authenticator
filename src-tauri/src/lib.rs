@@ -3,6 +3,7 @@
 
 mod commands;
 pub mod core;
+pub mod diag;
 pub mod legacy;
 pub mod notify;
 pub mod scope;
@@ -69,12 +70,14 @@ fn device_name(app: &tauri::AppHandle) -> String {
     #[cfg(target_os = "android")]
     {
         use tauri_plugin_encedo_keystore::KeystoreExt;
-        app.keystore().device_name().unwrap_or_else(|_| "Android phone".to_string())
+        // v1 sent `device.model + " (" + device.platform + ")"`; the broker may read the platform off it.
+        let model = app.keystore().device_name().unwrap_or_else(|_| "Android phone".to_string());
+        format!("{model} (Android)")
     }
     #[cfg(target_os = "ios")]
     {
         let _ = app;
-        "iPhone".to_string()
+        "iPhone (iOS)".to_string()
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -119,6 +122,9 @@ pub fn run() {
             commands::pair_refuse,
             commands::requests_refresh,
             commands::last_refresh,
+            commands::diag_log,
+            commands::diag_clear,
+            commands::module_forget,
             commands::request_allow,
             commands::request_deny,
             commands::module_unpair,

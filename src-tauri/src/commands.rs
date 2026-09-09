@@ -71,6 +71,22 @@ pub async fn pair_refuse(core: State<'_, Core>, fid: Option<String>) -> Res<()> 
 }
 
 #[tauri::command]
+pub fn diag_log() -> Vec<String> {
+    crate::diag::lines()
+}
+
+#[tauri::command]
+pub fn diag_clear() {
+    crate::diag::clear()
+}
+
+/// Remove a module from this phone only, when the broker would not let go.
+#[tauri::command]
+pub fn module_forget(core: State<'_, Core>, pid: String) -> Res<()> {
+    map(core.forget(&pid))
+}
+
+#[tauri::command]
 pub fn last_refresh(core: State<'_, Core>) -> RefreshReport {
     core.last_refresh()
 }

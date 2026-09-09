@@ -5,6 +5,8 @@
   const m = $derived(app.module(pid));
   const history = $derived(app.archive.filter((e) => e.pid === pid));
   let confirm = $state(false);
+  let objection = $state<string | null>(null);
+  async function unpair() { objection = await app.unpair(pid); }
 </script>
 
 <div class="screen">
@@ -31,9 +33,12 @@
       </dl>
     </div>
     <div class="screen-actions" class:row={confirm}>
-      {#if confirm}
+      {#if objection}
+        <button class="button plain" onclick={() => { objection = null; confirm = false; }}>Keep</button>
+        <button class="button exposed" disabled={app.busy} onclick={() => app.forget(pid)}>Remove from this phone anyway</button>
+      {:else if confirm}
         <button class="button plain" onclick={() => (confirm = false)}>Keep</button>
-        <button class="button exposed" disabled={app.busy} onclick={() => app.unpair(pid)}>{app.busy ? "Unpairing…" : "Unpair now"}</button>
+        <button class="button exposed" disabled={app.busy} onclick={unpair}>{app.busy ? "Unpairing…" : "Unpair now"}</button>
       {:else}
         <button class="button exposed" onclick={() => (confirm = true)}>Unpair this module</button>
       {/if}

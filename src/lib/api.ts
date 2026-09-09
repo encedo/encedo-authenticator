@@ -47,6 +47,9 @@ export const api = {
   allow: (id: string, periodSecs: number, writable: boolean) => call<AnswerView>("request_allow", { id, periodSecs, writable }),
   deny: (id: string) => call<AnswerView>("request_deny", { id }),
   unpair: (pid: string) => call<void>("module_unpair", { pid }),
+  forget: (pid: string) => call<void>("module_forget", { pid }),
+  diagLog: () => call<string[]>("diag_log"),
+  diagClear: () => call<void>("diag_clear"),
   pushPayload: (encedo: string) => call<boolean>("push_payload", { encedo }),
   pushTokenChanged: (token: string) => call<void>("push_token_changed", { token }),
 };

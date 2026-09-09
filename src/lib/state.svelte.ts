@@ -330,15 +330,32 @@ class AppState {
     this.screen = { name: "result", outcome: "denied", title: "Pair this phone", detail: preview.hostname };
   }
 
-  async unpair(pid: string) {
-    if (!inTauri) { this.modules = this.modules.filter((m) => m.pid !== pid); this.screen = { name: "modules" }; return; }
+  /** Unpair at the broker and locally. Returns the broker's objection, if any, so the screen can offer a local-only removal. */
+  async unpair(pid: string): Promise<string | null> {
+    if (!inTauri) { this.modules = this.modules.filter((m) => m.pid !== pid); this.screen = { name: "modules" }; return null; }
     this.busy = true;
     try {
       await api.unpair(pid);
       await this.reloadModules();
       this.screen = { name: "modules" };
+      return null;
     } catch (e) {
-      this.fail(e, "Unpairing failed.");
+      return (e as Error).message ?? String(e);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Drop the module from this phone only. */
+  async forget(pid: string) {
+    if (!inTauri) { this.modules = this.modules.filter((m) => m.pid !== pid); this.screen = { name: "modules" }; return; }
+    this.busy = true;
+    try {
+      await api.forget(pid);
+      await this.reloadModules();
+      this.screen = { name: "modules" };
+    } catch (e) {
+      this.fail(e, "Could not remove the module.");
     } finally {
       this.busy = false;
     }

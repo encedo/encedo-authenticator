@@ -4,8 +4,13 @@
   import Masthead from "../lib/Masthead.svelte";
   import Switch from "../lib/Switch.svelte";
   import { copyText, inTauri } from "../lib/native";
+  import { api } from "../lib/api";
   import { fmtDateTime } from "../lib/state.svelte";
   let copied = $state(false);
+  let diag = $state<string[]>([]);
+  let diagCopied = $state(false);
+  async function loadDiag() { diag = await api.diagLog().catch(() => []); }
+  async function copyDiag() { diagCopied = await copyText(diag.join("\n")); setTimeout(() => (diagCopied = false), 2000); }
   let lockNote = $state<string | null>(null);
   async function copyToken() {
     if (!app.push.token) return;
@@ -101,6 +106,23 @@
         <li><button class="rowbtn" onclick={() => app.go({ name: "problem", message: "api.encedo.com did not answer within 10 seconds. The request, if any, is still open on the module." })}><span class="main"><span class="name">Show a failure</span><span class="sub">broker unreachable</span></span></button></li>
         <li><button class="rowbtn" onclick={() => app.go({ name: "lock" })}><span class="main"><span class="name">Lock now</span></span></button></li>
       </ul>
+    </div>
+    {/if}
+    {#if inTauri}
+    <div class="card">
+      <div class="card-head"><span>Diagnostics</span><span class="v">{diag.length} lines</span></div>
+      {#if diag.length}
+        <div class="blob" style="max-height:40vh;overflow:auto;font-size:11px;white-space:pre-wrap">{diag.join("\n")}</div>
+      {:else}
+        <div class="empty">Load the log to see what the core did: pairing, broker checks, answers, unpairing. No key material.</div>
+      {/if}
+      <div class="card-foot">
+        <button class="button quiet small" onclick={loadDiag}>Load</button>
+        <span style="display:flex;gap:8px">
+          <button class="button quiet small" disabled={!diag.length} onclick={copyDiag}>{diagCopied ? "Copied" : "Copy"}</button>
+          <button class="button quiet small" onclick={async () => { await api.diagClear(); diag = []; }}>Clear</button>
+        </span>
+      </div>
     </div>
     {/if}
     <button class="button plain" onclick={() => app.go({ name: "about" })}>About this app</button>

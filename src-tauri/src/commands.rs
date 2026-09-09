@@ -15,14 +15,15 @@ fn map<T>(r: Result<T, crate::core::CoreError>) -> Res<T> {
 
 #[derive(Serialize)]
 pub struct AppInfo {
-    pub version: &'static str,
+    pub version: String,
     pub platform: &'static str,
     pub broker: String,
 }
 
 #[tauri::command]
-pub fn app_info() -> AppInfo {
-    AppInfo { version: env!("CARGO_PKG_VERSION"), platform: std::env::consts::OS, broker: crate::notify::DEFAULT_BASE.into() }
+pub fn app_info(app: tauri::AppHandle) -> AppInfo {
+    // tauri.conf version, so a dev build reports 2.0.0-dev.N rather than the crate's 2.0.0.
+    AppInfo { version: app.package_info().version.to_string(), platform: std::env::consts::OS, broker: crate::notify::DEFAULT_BASE.into() }
 }
 
 /// Development aid: a line in logcat (RustStdoutStderr) from the webview,

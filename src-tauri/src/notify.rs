@@ -114,6 +114,15 @@ struct AllByPidRaw {
     eventid: serde_json::Value,
 }
 
+fn pid_of(v: &serde_json::Value) -> Option<String> {
+    match v {
+        serde_json::Value::String(p) => Some(p.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Array(a) => a.first().and_then(pid_of),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingEvent {
     pub event_id: String,
@@ -179,13 +188,12 @@ impl NotifyClient {
         }
         let text = self.text(Method::POST, &self.url("/notify/event/data/allbypid"), Some(&PidsBody { pid: pids })).await?;
         let raw: AllByPidRaw = serde_json::from_str(&text).map_err(|e| NotifyError::BadResponse(format!("{e}: {}", text.chars().take(120).collect::<String>())))?;
+        // The broker answers `{eventid: {"<event>": ["<pid>"]}}`: the pid comes as a
+        // one-element array. v1 did `String(value)`, which joins an array with
+        // commas, so a single pid came out as itself. Accept a string, a number
+        // or the first element of an array.
         let map: HashMap<String, String> = match raw.eventid {
-            // v1 did String(value): accept anything scalar as the pid.
-            serde_json::Value::Object(m) => m.into_iter().filter_map(|(k, v)| match v {
-                serde_json::Value::String(p) => Some((k, p)),
-                serde_json::Value::Number(n) => Some((k, n.to_string())),
-                _ => None,
-            }).collect(),
+            serde_json::Value::Object(m) => m.into_iter().filter_map(|(k, v)| pid_of(&v).map(|p| (k, p))).collect(),
             _ => HashMap::new(),
         };
         let mut out: Vec<PendingEvent> = map.into_iter().map(|(event_id, pid)| PendingEvent { event_id, pid }).collect();
@@ -287,6 +295,12 @@ mod tests {
         assert!(matches!(arr.eventid, serde_json::Value::Array(_)));
         let obj: AllByPidRaw = serde_json::from_str(r#"{"eventid":{"ev1":"pid1"}}"#).unwrap();
         assert_eq!(obj.eventid["ev1"], "pid1");
+        // Live broker shape (2026-09-09): the pid is a one-element array.
+        let live: AllByPidRaw = serde_json::from_str(r#"{"eventid":{"5X8YX":["UyR+w6=="],"g0O7U":["UyR+w6=="]}}"#).unwrap();
+        let pids: Vec<String> = live.eventid.as_object().unwrap().values().filter_map(pid_of).collect();
+        assert_eq!(pids, vec!["UyR+w6==", "UyR+w6=="]);
+        assert_eq!(pid_of(&serde_json::json!("x")), Some("x".into()));
+        assert_eq!(pid_of(&serde_json::json!(null)), None);
     }
 }
 

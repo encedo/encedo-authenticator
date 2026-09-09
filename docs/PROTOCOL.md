@@ -53,8 +53,9 @@ Strona HEM (docs.encedo.com): `POST /api/auth/ext/init {epk}` → `{request, eid
 Wyzwalacze odpytania: push, tap w powiadomienie, `resume`, `focus`, odblokowanie, zakończenie poprzedniego
 zdarzenia. Jedno zdarzenie naraz (`_eventBeingHandled`).
 
-1. `POST /notify/event/data/allbypid {pid: [wszystkie pid z magazynu]}` → `{eventid: {<eventId>: <pid>, ...}}`
-   (pusta lista zdarzeń przychodzi jako tablica, v1 sprawdza `!Array.isArray`).
+1. `POST /notify/event/data/allbypid {pid: [wszystkie pid z magazynu]}` → `{eventid: {<eventId>: [<pid>], ...}}`
+   (na żywo 2026-09-09: wartość to jednoelementowa tablica; v1 robiło `String(value)`, co ją spłaszcza; pusta
+   lista zdarzeń przychodzi jako tablica, v1 sprawdza `!Array.isArray`).
 2. Dla pierwszego zdarzenia: `GET /notify/event/data/{eventId}/{pidx}` →
    `{jti, scope, epk, exp, ipinfo_eid: {city, country, ip}}`.
 3. Wygaśnięcie: jeśli `now > exp`, `DELETE` zdarzenia, wpis w archiwum, następne. **[v2]** sprawdzać przed

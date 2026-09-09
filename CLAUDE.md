@@ -11,6 +11,7 @@ Zacznij od `docs/`:
 - `docs/PROTOCOL.md` — bajtowy opis parowania, żądania i unpair z v1, z odsyłaczami do linii; podstawa modułu w Ruście.
 - `docs/ENVIRONMENT.md` — trzy maszyny i jak na nich budować.
 - `docs/JOURNAL.md` — dziennik sesji: co zrobiono, co dalej.
+- `docs/PARITY.md` — tabela parytetu z v1: co przeniesione, co czeka na test, co pominięte.
 
 Zasady projektu:
 

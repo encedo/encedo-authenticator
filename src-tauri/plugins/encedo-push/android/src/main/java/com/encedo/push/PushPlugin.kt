@@ -2,6 +2,8 @@ package com.encedo.push
 
 import android.Manifest
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
 import android.os.Build
 import android.util.Log
@@ -30,6 +32,7 @@ import com.google.firebase.messaging.RemoteMessage
 class PushPlugin(private val activity: Activity) : Plugin(activity) {
 
     companion object {
+        const val CHANNEL = "encedo_requests"
         @Volatile var instance: PushPlugin? = null
         private val systemKeys = setOf(
             "from", "collapse_key", "message_id", "google.message_id", "google.sent_time",
@@ -40,7 +43,19 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
 
     override fun load(webView: WebView) {
         instance = this
+        ensureChannel()
         deliverTap(activity.intent)
+    }
+
+    /** The channel the backend addresses (`android.notification.channel_id`). A
+     *  notification for a channel that does not exist is dropped on Android 8+. */
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val nm = activity.getSystemService(NotificationManager::class.java) ?: return
+        if (nm.getNotificationChannel(CHANNEL) != null) return
+        val ch = NotificationChannel(CHANNEL, "Access requests", NotificationManager.IMPORTANCE_HIGH)
+        ch.description = "A module asks this phone to allow or deny an operation"
+        nm.createNotificationChannel(ch)
     }
 
     override fun onNewIntent(intent: Intent) {

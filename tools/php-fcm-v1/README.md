@@ -10,7 +10,15 @@ Google switched off on 20 June 2024.
    owned by the PHP user.
 2. Pick a writable cache path for the access token, e.g.
    `/var/cache/encedo/fcm-token.json` (created on first use).
-3. Where the old code built the legacy payload and posted it:
+3. `send_fcm.php` is the old `send_fcm($devid, $data, $silent)` rewritten over this
+   class: same signature, same Redis keys, same `{success, failure, results}` shape
+   (`NotRegistered` for a dead token, so the old cleanup keeps working). Include it in
+   place of the old function; the service-account path and the token cache path can
+   be set with `ENCEDO_FCM_SERVICE_ACCOUNT` and `ENCEDO_FCM_TOKEN_CACHE`.
+   The old code turned certificate verification off; this one verifies. If the host's
+   CA bundle is stale, point curl at a fresh `cacert.pem` rather than switching it off.
+
+   Or, where the old code built the legacy payload and posted it:
 
 ```php
 require_once __DIR__ . '/FcmV1.php';

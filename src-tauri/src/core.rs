@@ -179,7 +179,18 @@ impl Core {
             Err(NotifyError::Expired) => return Err(CoreError::Notify(NotifyError::Rejected(404, "the pairing code has expired; show a fresh one in the Manager".into()))),
             Err(e) => return Err(e.into()),
         };
+        // [v2] The QR carries a hash of the request the link must serve.
+        if !code.hash.is_empty() {
+            use sha2::{Digest, Sha256};
+            let digest = b64(&Sha256::digest(offer.request.as_bytes()));
+            if digest != code.hash.trim() {
+                return Err(CoreError::State("the pairing link served a different request than the code promised".into()));
+            }
+        }
         let request = PairingRequest::from_jwt(&offer.request)?;
+        if request.expired(now()) {
+            return Err(CoreError::Notify(NotifyError::Rejected(410, "the pairing request has expired; show a fresh code in the Manager".into())));
+        }
         let already = self.with_store(|s| Ok(s.data.modules.iter().any(|m| m.eid == request.iss)))?;
         let preview = PairingPreview { link: code.link.clone(), user: code.user.clone(), hostname: code.hostname.clone(), email: code.email.clone(), issuer: offer.ipinfo_eid.clone(), already_paired: already };
         *self.pairing.lock().map_err(|_| CoreError::State("pairing poisoned".into()))? = Some(PendingPairing { code, request });

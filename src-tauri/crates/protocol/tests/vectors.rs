@@ -65,6 +65,18 @@ fn pairing_reply_matches_v1() {
     let out = reply(&req, &app, s(&p["inputs"], "label"), s(&p["inputs"], "fid")).unwrap();
     let expected: PairingReply = serde_json::from_value(p["expected"]["post_body"].clone()).unwrap();
     assert_eq!(out, expected);
+
+    // The module's own challenge has no `eat`: v1 dropped the claim, so do we.
+    let mut no_eat = p["inputs"]["request_payload"].clone();
+    no_eat.as_object_mut().unwrap().remove("eat");
+    no_eat["exp"] = serde_json::json!(4102444800u64);
+    let req2: PairingRequest = serde_json::from_value(no_eat).unwrap();
+    let out2 = reply(&req2, &app, "x", "y").unwrap();
+    let body = encedo_protocol::jwt::payload_unverified(&out2.reply).unwrap();
+    assert!(body.get("eat").is_none());
+    assert_eq!(body.as_object().unwrap().keys().cloned().collect::<Vec<_>>(), ["jti", "iss", "aud", "epk", "label"]);
+    assert!(!req2.expired(4102444799));
+    assert!(req2.expired(4102444801));
 }
 
 #[test]

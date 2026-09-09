@@ -18,6 +18,8 @@ pub use pairing::{PairingReply, PairingRequest};
 pub enum Error {
     #[error("malformed {0}")]
     Malformed(&'static str),
+    #[error("malformed {0}: field {1} missing or not a string")]
+    MalformedField(&'static str, &'static str),
     #[error("scope MAC does not match")]
     BadMac,
     #[error("request expired")]

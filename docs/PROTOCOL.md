@@ -33,7 +33,10 @@ trzymamy kolejność z v1, żeby wektory z v1 pasowały bajt w bajt.
 
 1. QR z kamery: JSON `{link, user, hostname, email}`.
 2. `GET link` → `{request: <JWT>, ipinfo_eid: {city, country, ip}}`. Payload JWT (bez weryfikacji podpisu,
-   aplikacja nie ma jeszcze sekretu): `{jti, eat, iss: eid, aud: epk}`.
+   aplikacja nie ma jeszcze sekretu): `{jti, exp, iss: eid, aud: epk}` (tak wystawia moduł, potwierdzone
+   przykładem z docs.encedo.com 2026-09-09). v1 czytało `eat`, którego nie ma, i `JSON.stringify` gubił
+   `undefined`, więc odpowiedź v1 nie zawiera `eat`. **[v2]** `eat` opcjonalne i przepisywane jak przyszło;
+   `exp` sprawdzane; `hash` z kodu QR (`base64(SHA-256(request))`, Manager v1 i SDK) porównywany z `request`.
 3. Jeśli `eid` jest już w magazynie: „Already paired”, `DELETE link`, koniec.
 4. Generujemy `aid`/`aid_prv`. `S1 = X25519(aid_prv, eid)`.
 5. `reply = JWT_HS256(S1, {jti, eat, iss: aid, aud: eid, epk, label})`.

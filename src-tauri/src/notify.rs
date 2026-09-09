@@ -64,6 +64,9 @@ impl NotifyError {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct PairingCode {
     pub link: String,
+    /// base64(SHA-256(request)): the Manager's promise of what the link serves.
+    #[serde(default)]
+    pub hash: String,
     #[serde(default)]
     pub user: String,
     #[serde(default)]
@@ -78,7 +81,7 @@ impl PairingCode {
     pub fn parse(raw: &str) -> Result<Self, NotifyError> {
         let raw = raw.trim();
         let code: PairingCode = if raw.starts_with("https://") {
-            PairingCode { link: raw.to_string(), user: String::new(), hostname: String::new(), email: String::new() }
+            PairingCode { link: raw.to_string(), hash: String::new(), user: String::new(), hostname: String::new(), email: String::new() }
         } else {
             serde_json::from_str(raw).map_err(|_| NotifyError::BadResponse("this code is not an Encedo pairing code".into()))?
         };

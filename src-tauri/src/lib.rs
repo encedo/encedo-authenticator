@@ -3,6 +3,7 @@
 
 mod commands;
 pub mod core;
+pub mod legacy;
 pub mod notify;
 pub mod scope;
 pub mod store;
@@ -98,7 +99,12 @@ pub fn run() {
             let store = Store::open(data_dir.join("store.bin"), secrets.as_ref())?;
             let client = NotifyClient::new(std::env::var("ENCEDO_BROKER").as_deref().unwrap_or(notify::DEFAULT_BASE));
             let name = device_name(app.handle());
-            app.manage(Core::new(store, client, name));
+            let core = Core::new(store, client, name);
+            let leftovers = legacy::sweep_v1(&data_dir);
+            if !leftovers.is_empty() {
+                let _ = core.note_v1_removed(&leftovers);
+            }
+            app.manage(core);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

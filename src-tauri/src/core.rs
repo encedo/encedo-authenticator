@@ -147,6 +147,12 @@ impl Core {
         self.with_store(|s| s.update(|d| d.archive_push(ArchiveEntry { id, pid: pid.into(), title: title.into(), detail: detail.into(), outcome, at: now() })))
     }
 
+    /// The previous app's data was found and removed: say so in the archive,
+    /// where it stays until the person pairs again.
+    pub fn note_v1_removed(&self, files: &[String]) -> Result<(), CoreError> {
+        self.archive("", "Previous version", &format!("data from the old app removed ({}); pair your modules again", files.join(", ")), Outcome::Unpaired)
+    }
+
     // ---- read side ---------------------------------------------------------
 
     pub fn settings(&self) -> Result<Settings, CoreError> {

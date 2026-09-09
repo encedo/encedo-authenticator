@@ -1,7 +1,16 @@
 <script lang="ts">
   import { app, count, fmtDateTime, shortPid } from "../lib/state.svelte";
   import Masthead from "../lib/Masthead.svelte";
+  import { onMount } from "svelte";
+  import { inTauri } from "../lib/native";
   const recent = $derived(app.archive.slice(0, 4));
+  // Until the backend sends push over FCM v1, the phone asks the broker itself
+  // while this screen is open. Cheap: allbypid with a handful of pids.
+  onMount(() => {
+    if (!inTauri) return;
+    const t = setInterval(() => { if (app.modules.length && !app.busy) void app.refresh(); }, 15_000);
+    return () => clearInterval(t);
+  });
   const n = $derived(app.pending.length);
   const heading = $derived(
     !app.online ? "This phone is off the network." : n ? `${count(n, "request")} ${n === 1 ? "is" : "are"} waiting for you.` : "Nothing is waiting for you.",

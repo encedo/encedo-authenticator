@@ -1,0 +1,10 @@
+#!/usr/bin/env node
+// The generated Xcode build phase runs `node tauri ios xcode-script …` with this
+// directory as its working directory, so Node looks for a module called `tauri`
+// right here. Hand it the CLI the project depends on. The nearest package.json
+// says "type": "module", so this file is ESM.
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const here = dirname(fileURLToPath(import.meta.url))
+await import(resolve(here, '../../../node_modules/@tauri-apps/cli/tauri.js'))

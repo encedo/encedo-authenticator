@@ -15,9 +15,7 @@ src-tauri/gen/android/app/src/main/res/values/firebase.xml
 src-tauri/gen/android/app/google-services.json
 src-tauri/gen/apple/build/
 src-tauri/gen/apple/Pods/
-src-tauri/gen/apple/xcuserdata/
-src-tauri/gen/apple/*.xcodeproj/project.xcworkspace/xcuserdata/
-src-tauri/gen/apple/*.xcodeproj/xcuserdata/
+src-tauri/gen/apple/**/xcuserdata/
 
 # Secrets stay outside the repo
 keystore.jks

@@ -69,7 +69,8 @@ Legenda: ✅ przeniesione i sprawdzone na żywo · 🟡 przeniesione, czeka na t
 |---|---|---|
 | Build Android z Vostro, numerowane APK dev | ✅ | `scripts/vostro-dev-apk.sh` |
 | Podpis kluczem upload, AAB do Play | ⬜ | wstrzymane: nowa firma RKV zamiast Encedo, nowe konto Google, nowy projekt Firebase i nowe klucze (patrz „Przeprowadzka na RKV”) |
-| iOS | ⬜ | `tauri ios init` na Mac Mini, własny plugin push po stronie iOS, konto Apple Developer |
+| iOS — kompilacja i uruchomienie | ✅ | projekt Xcode w repo, build i uruchomienie na symulatorze iPhone 17 (iOS 26.5), magazyn na Keychainie, ikony pełnokwadratowe |
+| iOS — push i podpis | ⬜ | iOS-owa połowa `encedo-push` (APNs/FCM), konto Apple Developer, TestFlight |
 | Zdalne repo | ⬜ | push wstrzymany (konfigi Firebase w historii, repo publiczne) |
 
 ## Przeprowadzka na RKV (decyzja z 10 września 2026)

@@ -1,14 +1,33 @@
 <?php
 // ---- paste from here into the old script -------------------------------------
 // FCM HTTP v1 replacement for send_fcm(). PHP 7.3+, ext-openssl, ext-curl, ext-json.
-// Point $FCM_V2_SERVICE_ACCOUNT at the service-account JSON you already have in
-// the script: a JSON string or the decoded array, either works.
+// Service account: with nothing set, the first *.json file next to this script
+// that contains "service_account" is used. $FCM_V2_SERVICE_ACCOUNT may also be
+// set beforehand to a file path, a JSON string or the decoded array.
 
-$FCM_V2_SERVICE_ACCOUNT = isset($FCM_V2_SERVICE_ACCOUNT) ? $FCM_V2_SERVICE_ACCOUNT : '{ "type": "service_account", "...": "paste the JSON here or assign the variable above" }';
+if (!isset($FCM_V2_SERVICE_ACCOUNT)) {
+    $FCM_V2_SERVICE_ACCOUNT = null;
+    foreach ((array)glob(__DIR__ . '/*.json') as $f) {
+        if (strpos((string)@file_get_contents($f), '"service_account"') !== false) { $FCM_V2_SERVICE_ACCOUNT = $f; break; }
+    }
+}
+
+/** The service account as an array, whatever form $FCM_V2_SERVICE_ACCOUNT takes. */
+function fcm_v2_service_account() {
+    global $FCM_V2_SERVICE_ACCOUNT;
+    static $sa = null;
+    if ($sa !== null) { return $sa; }
+    $v = $FCM_V2_SERVICE_ACCOUNT;
+    if (is_string($v) && $v !== '' && $v[0] !== '{' && is_file($v)) { $v = file_get_contents($v); }
+    $sa = is_array($v) ? $v : json_decode((string)$v, true);
+    if (empty($sa['client_email']) || empty($sa['private_key'])) {
+        throw new RuntimeException('fcm_v2: no service account: put the Firebase service-account .json next to this script or set $FCM_V2_SERVICE_ACCOUNT');
+    }
+    return $sa;
+}
 
 /** Bearer token for firebase.messaging, minted from the service account and cached for its lifetime. */
 function fcm_v2_access_token($force = false) {
-    global $FCM_V2_SERVICE_ACCOUNT;
     static $mem = null;
     $cache = sys_get_temp_dir() . '/encedo-fcm-v2-token.json';
     if (!$force) {
@@ -17,10 +36,7 @@ function fcm_v2_access_token($force = false) {
             return $mem['access_token'];
         }
     }
-    $sa = is_array($FCM_V2_SERVICE_ACCOUNT) ? $FCM_V2_SERVICE_ACCOUNT : json_decode($FCM_V2_SERVICE_ACCOUNT, true);
-    if (empty($sa['client_email']) || empty($sa['private_key'])) {
-        throw new RuntimeException('fcm_v2: service account JSON missing client_email/private_key');
-    }
+    $sa = fcm_v2_service_account();
     $tokenUrl = !empty($sa['token_uri']) ? $sa['token_uri'] : 'https://oauth2.googleapis.com/token';
     $now = time();
     $b64 = function ($s) { return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); };
@@ -61,8 +77,7 @@ function fcm_v2_access_token($force = false) {
 
 /** Same signature, Redis keys and return shape as the old send_fcm(); transport is FCM v1. */
 function send_fcm_v2($devid, $data, $silent = false) {
-    global $FCM_V2_SERVICE_ACCOUNT;
-    $sa = is_array($FCM_V2_SERVICE_ACCOUNT) ? $FCM_V2_SERVICE_ACCOUNT : json_decode($FCM_V2_SERVICE_ACCOUNT, true);
+    try { $sa = fcm_v2_service_account(); } catch (RuntimeException $ex) { $sa = []; }
     $project = isset($sa['project_id']) ? $sa['project_id'] : 'encedo-mobile-authenticator';
 
     $msg = [

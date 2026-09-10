@@ -152,7 +152,13 @@ export async function startPush(h: PushHandlers): Promise<PushState> {
     const { token } = await invoke<{ token: string }>(`plugin:${PUSH}|get_token`);
     return { status: "registered", token, permission };
   } catch (e) {
-    return { status: "error", error: String(e), permission };
+    const msg = String(e);
+    // An iOS build signed by a free Apple account carries no push entitlement,
+    // so the system never hands out an APNs token. Say that, not the raw error.
+    if (/APNS|aps-environment|entitlement/i.test(msg)) {
+      return { status: "unavailable", error: "This build cannot receive push: it is signed with a free Apple account, which does not grant the push entitlement. Requests still arrive while the app is open.", permission };
+    }
+    return { status: "error", error: msg, permission };
   }
 }
 

@@ -69,8 +69,8 @@ Legenda: ✅ przeniesione i sprawdzone na żywo · 🟡 przeniesione, czeka na t
 |---|---|---|
 | Build Android z Vostro, numerowane APK dev | ✅ | `scripts/vostro-dev-apk.sh` |
 | Podpis kluczem upload, AAB do Play | ⬜ | wstrzymane: nowa firma RKV zamiast Encedo, nowe konto Google, nowy projekt Firebase i nowe klucze (patrz „Przeprowadzka na RKV”) |
-| iOS — kompilacja i uruchomienie | ✅ | projekt Xcode w repo, build i uruchomienie na symulatorze iPhone 17 (iOS 26.5), magazyn na Keychainie, ikony pełnokwadratowe |
-| iOS — push (kod) | 🟡 | iOS-owa połowa `encedo-push` z Firebase Messaging napisana i zbudowana; na symulatorze Firebase startuje z naszym sender id, token czeka na APNs, czyli na prawdziwy telefon |
+| iOS — na telefonie | ✅ | iPhone 15 Pro (iOS 26.6.1), podpis darmowym zespołem: parowanie, biometria, magazyn na Keychainie, skaner, odpytywanie brokera |
+| iOS — push (kod) | 🟡 | plugin z Firebase Messaging działa w aplikacji; token APNs nie powstanie bez uprawnienia `aps-environment`, którego darmowy zespół nie daje (sprawdzone: `codesign -d --entitlements` pokazuje tylko `application-identifier`, `team-identifier`, `get-task-allow`) |
 | iOS — podpis i wydanie | ⬜ | konto Apple Developer, profil z uprawnieniem push, TestFlight |
 | Zdalne repo | ⬜ | push wstrzymany (konfigi Firebase w historii, repo publiczne) |
 

@@ -65,8 +65,11 @@ symulator w toku. Brakuje trzech rzeczy, żeby aplikacja była kompletna:
    i klucz APNs. Zostaje: `GoogleService-Info.plist` z nowego projektu w `gen/apple/assets/`
    (poza repo), profil z uprawnieniem `aps-environment` i test na telefonie —
    symulator nie wystawia tokena APNs, więc dalej się nie da sprawdzić.
-3. **Podpis**: konto z A4 w Xcode, profil provisioning, TestFlight. Na telefon córki
-   wystarczy darmowy Apple ID i profil na 7 dni, ale to zabawka: prawdziwy test to TestFlight.
+3. **Podpis**: konto z A4 w Xcode, profil provisioning, TestFlight. Darmowy Apple ID
+   wystarczy do wszystkiego poza pushem: sprawdzone 10 września na iPhonie 15 Pro,
+   działa parowanie, biometria, skaner i odpytywanie brokera, a `aps-environment`
+   nie da się podpisać darmowym zespołem, więc APNs nie wystawia tokena.
+   Push na iOS = płatny program, bez wyjątków.
 
 Reszta działa bez zmian: skaner (plugin ma część iOS), biometria (Face ID przez ten sam
 plugin), protokół i magazyn w Ruście, UI. `Info.ios.plist` ma już powody dostępu do

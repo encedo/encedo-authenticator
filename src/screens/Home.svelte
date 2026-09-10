@@ -24,7 +24,7 @@
       <p class="eyebrow" class:exposed={!app.online}>Now</p>
       <h1>{heading}</h1>
       {#if app.online}
-        <p>{app.push.status === "registered" ? "Push is registered." : app.push.status === "pending" ? "Push is registering." : "Push is not available here."} {count(app.modules.length, "module")} can ask you.{#if app.busy} Checking the broker…{/if}</p>
+        <p>{app.push.status === "registered" ? "Push is registered." : app.push.status === "pending" ? "Push is registering." : "Push is off in this build; this screen asks the broker every 15 s."} {count(app.modules.length, "module")} can ask you.{#if app.busy} Checking the broker…{/if}</p>
       {:else}
         <p>A request cannot be answered until the network is back. The module keeps waiting, then gives up on its own.</p>
       {/if}

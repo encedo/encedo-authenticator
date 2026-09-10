@@ -80,7 +80,7 @@ APP=$(ls -d src-tauri/gen/apple/build/arm64/*.ipa src-tauri/gen/apple/build/arm6
 [ -n "$APP" ] || { echo "nothing to install in build/arm64" >&2; exit 1; }
 echo "built: $APP  (dev build $N, bundle com.encedo.mobile.auth.ios.dev)"
 
-UDID=$(xcrun xctrace list devices 2>/dev/null | awk '/^iPhone .*\(.*\) \(/ {gsub(/[()]/,"",$NF); print $NF; exit}')
+UDID=$(xcrun xctrace list devices 2>/dev/null | awk '/^iPhone .*\(.*\) \(/ {gsub(/[()]/,"",$NF); print $NF; exit}' || true)
 if [ -n "$UDID" ]; then
   xcrun devicectl device install app --device "$UDID" "$APP" | tail -3
   echo

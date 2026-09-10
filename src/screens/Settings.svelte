@@ -53,7 +53,7 @@
         <div><dt>Permission</dt><dd class:risk={app.push.permission === "denied"}>{app.push.permission ?? (inTauri ? "not asked" : "n/a")}</dd></div>
         <div class="wide">
           <dt class="between"><span>Token</span>{#if app.push.token}<button class="copy" class:done={copied} onclick={copyToken}>{copied ? "Copied" : "Copy"}</button>{/if}</dt>
-          <dd class="mono">{app.push.token ?? (app.push.error ?? "—")}</dd>
+          <dd class:mono={!!app.push.token}>{app.push.token ?? (app.push.error ?? "—")}</dd>
         </div>
       </dl>
       {#if inTauri && app.push.permission !== "granted"}

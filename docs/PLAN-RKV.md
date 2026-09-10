@@ -75,6 +75,22 @@ Reszta działa bez zmian: skaner (plugin ma część iOS), biometria (Face ID pr
 plugin), protokół i magazyn w Ruście, UI. `Info.ios.plist` ma już powody dostępu do
 kamery i Face ID, portret i tryb `remote-notification`.
 
+### Push na iOS: co odblokowuje płatne konto
+
+Kod jest gotowy i sprawdzony, zostaje wyłącznie strona kont i podpisu:
+
+1. Apple Developer Program na koncie RKV (99 USD/rok). Konto firmowe wymaga numeru
+   D-U-N-S i kilku dni; indywidualne jest od ręki.
+2. W portalu Apple: App ID dla bundle id aplikacji z włączoną zdolnością **Push Notifications**.
+3. Klucz APNs `.p8` w portalu Apple → wgrany w konsoli Firebase (Project settings →
+   Cloud Messaging → APNs Authentication Key, razem z Key ID i Team ID). Klucz z czasów v1
+   należy do zespołu Encedo, więc pod nowym zespołem potrzebny jest nowy.
+4. Build z `aps-environment` (jest już w `gen/apple/…entitlements`; skrypt dev go usuwa,
+   bo darmowy zespół go nie podpisze — ścieżka produkcyjna go zachowuje).
+5. Test na telefonie: token FCM w Ustawieniach, `send_fcm_v2` z backendu, powiadomienie
+   przy zamkniętej aplikacji i tap prowadzący do ekranu żądania.
+6. TestFlight zamiast kabla, gdy trzeba dać aplikację komuś spoza biurka.
+
 **App Review**: recenzent musi umieć sparować telefon. Bez dostępu do HEM utknie.
 Do przygotowania: konto testowe i osiągalny HEM z kodem QR w notatkach dla recenzenta,
 albo tryb demonstracyjny w aplikacji. Do rozstrzygnięcia przed pierwszym zgłoszeniem.

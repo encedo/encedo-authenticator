@@ -19,19 +19,19 @@ use crate::store::{SecretStore, Store};
 
 /// Where the data key comes from on this platform.
 fn secret_store(app: &tauri::AppHandle, data_dir: &std::path::Path) -> Box<dyn SecretStore> {
-    #[cfg(target_os = "android")]
+    #[cfg(mobile)]
     {
-        Box::new(android::KeystoreSecret { app: app.clone(), path: data_dir.join("store.key") })
+        Box::new(mobile_secret::KeystoreSecret { app: app.clone(), path: data_dir.join("store.key") })
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(mobile))]
     {
         let _ = app;
         Box::new(store::DevFileSecret { path: data_dir.join("dev-store.key") })
     }
 }
 
-#[cfg(target_os = "android")]
-mod android {
+#[cfg(mobile)]
+mod mobile_secret {
     use std::fs;
     use std::path::PathBuf;
 
@@ -40,7 +40,8 @@ mod android {
 
     use crate::store::{DataKey, SecretStore, StoreError};
 
-    /// The data key, wrapped by the Android Keystore, in `store.key`.
+    /// The data key, wrapped by the platform's key store (Android Keystore, iOS
+    /// Keychain), in `store.key`.
     pub struct KeystoreSecret {
         pub app: tauri::AppHandle,
         pub path: PathBuf,
@@ -67,19 +68,16 @@ mod android {
 }
 
 fn device_name(app: &tauri::AppHandle) -> String {
-    #[cfg(target_os = "android")]
+    #[cfg(mobile)]
     {
         use tauri_plugin_encedo_keystore::KeystoreExt;
-        // v1 sent `device.model + " (" + device.platform + ")"`; the broker may read the platform off it.
-        let model = app.keystore().device_name().unwrap_or_else(|_| "Android phone".to_string());
-        format!("{model} (Android)")
+        // v1 sent `device.model + " (" + device.platform + ")"`; keep the shape.
+        let fallback = if cfg!(target_os = "ios") { "iPhone" } else { "Android phone" };
+        let platform = if cfg!(target_os = "ios") { "iOS" } else { "Android" };
+        let model = app.keystore().device_name().unwrap_or_else(|_| fallback.to_string());
+        format!("{model} ({platform})")
     }
-    #[cfg(target_os = "ios")]
-    {
-        let _ = app;
-        "iPhone (iOS)".to_string()
-    }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(mobile))]
     {
         let _ = app;
         format!("{} desktop", std::env::consts::OS)

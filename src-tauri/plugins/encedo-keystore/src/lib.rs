@@ -12,6 +12,9 @@ use tauri::{
     Manager, Runtime,
 };
 
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_encedo_keystore);
+
 pub struct Keystore<R: Runtime>(PluginHandle<R>);
 
 #[derive(Serialize)]
@@ -30,14 +33,14 @@ struct NameOut {
 }
 
 impl<R: Runtime> Keystore<R> {
-    /// Manufacturer and model, e.g. "Samsung SM-S921B".
+    /// Manufacturer and model on Android, the user's device name on iOS.
     pub fn device_name(&self) -> Result<String, String> {
-        #[cfg(target_os = "android")]
+        #[cfg(mobile)]
         {
             let out: NameOut = self.0.run_mobile_plugin("deviceName", ()).map_err(|e| e.to_string())?;
             Ok(out.name)
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(mobile))]
         {
             Err("not available".into())
         }
@@ -52,7 +55,7 @@ impl<R: Runtime> Keystore<R> {
     }
 
     fn call(&self, cmd: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
-        #[cfg(target_os = "android")]
+        #[cfg(mobile)]
         {
             let out: BytesOut = self
                 .0
@@ -60,10 +63,10 @@ impl<R: Runtime> Keystore<R> {
                 .map_err(|e| e.to_string())?;
             STANDARD.decode(out.data).map_err(|e| e.to_string())
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(mobile))]
         {
             let _ = (cmd, bytes);
-            Err("keystore plugin not available on this platform yet".into())
+            Err("keystore plugin not available on this platform".into())
         }
     }
 }
@@ -82,14 +85,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("encedo-keystore")
         .setup(|app, api| {
             #[cfg(target_os = "android")]
-            {
-                let handle = api.register_android_plugin("com.encedo.keystore", "KeystorePlugin")?;
-                app.manage(Keystore(handle));
-            }
-            #[cfg(not(target_os = "android"))]
-            {
-                let _ = (app, api);
-            }
+            let handle = api.register_android_plugin("com.encedo.keystore", "KeystorePlugin")?;
+            #[cfg(target_os = "ios")]
+            let handle = api.register_ios_plugin(init_plugin_encedo_keystore)?;
+            app.manage(Keystore(handle));
             Ok(())
         })
         .build()

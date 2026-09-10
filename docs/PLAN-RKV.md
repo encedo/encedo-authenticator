@@ -59,8 +59,12 @@ symulator w toku. Brakuje trzech rzeczy, żeby aplikacja była kompletna:
 
 1. **Magazyn**: klucz danych na iOS leży dziś w pliku (`DevFileSecret`). Do zrobienia:
    iOS-owa połowa pluginu `encedo-keystore` na Keychainie z `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
-2. **Push**: iOS-owa połowa `encedo-push` (Firebase iOS SDK albo APNs bezpośrednio;
-   przy FCM potrzebny klucz APNs `.p8` w konsoli Firebase i uprawnienie push w profilu).
+2. **Push**: napisane (`plugins/encedo-push/ios`, Firebase Messaging przez SPM). v1 na iOS
+   chodziło przez FCM z tym samym nadawcą, a projekt `encedo-mobile-authenticator` ma
+   aplikację iOS o bundle id `com.encedo.mobile.auth.ios` (GOOGLE_APP_ID `1:720382161304:ios:1a2a…`)
+   i klucz APNs. Zostaje: `GoogleService-Info.plist` z nowego projektu w `gen/apple/assets/`
+   (poza repo), profil z uprawnieniem `aps-environment` i test na telefonie —
+   symulator nie wystawia tokena APNs, więc dalej się nie da sprawdzić.
 3. **Podpis**: konto z A4 w Xcode, profil provisioning, TestFlight. Na telefon córki
    wystarczy darmowy Apple ID i profil na 7 dni, ale to zabawka: prawdziwy test to TestFlight.
 

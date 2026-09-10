@@ -22,6 +22,7 @@ keystore.jks
 build.json
 google-services.json
 GoogleService-Info.plist
+src-tauri/gen/apple/assets/GoogleService-Info.plist
 *.p8
 *.p12
 .env

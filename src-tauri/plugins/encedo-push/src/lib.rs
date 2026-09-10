@@ -11,20 +11,19 @@ use tauri::{
 
 /// Handle to the native side; kept so Rust can call into it later
 /// (for example to hand the token to the protocol module).
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_encedo_push);
+
 pub struct Push<R: Runtime>(#[allow(dead_code)] PluginHandle<R>);
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("encedo-push")
         .setup(|app, api| {
             #[cfg(target_os = "android")]
-            {
-                let handle = api.register_android_plugin("com.encedo.push", "PushPlugin")?;
-                app.manage(Push(handle));
-            }
-            #[cfg(not(target_os = "android"))]
-            {
-                let _ = (app, api);
-            }
+            let handle = api.register_android_plugin("com.encedo.push", "PushPlugin")?;
+            #[cfg(target_os = "ios")]
+            let handle = api.register_ios_plugin(init_plugin_encedo_push)?;
+            app.manage(Push(handle));
             Ok(())
         })
         .build()

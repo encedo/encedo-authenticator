@@ -3,6 +3,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application>
+        <!-- The small icon must be a white silhouette; the system tints it. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_encedo" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/encedo_notification" />
+
         <!-- Channel FCM uses for a notification message that names none. -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

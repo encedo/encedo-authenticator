@@ -89,7 +89,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--sealed); ou
 .screen-actions.row > .exposed:first-child { flex: 0 0 38%; }
 
 .masthead { display: flex; align-items: center; gap: 10px; padding: 14px var(--pad) 0; font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); }
-.masthead .mark { width: 26px; height: 26px; flex: none; }
+.masthead .mark { width: 26px; height: 26px; flex: none; border-radius: 50%; }
 .masthead b { color: var(--ink); font-weight: 500; letter-spacing: .02em; }
 .masthead .back { margin-left: auto; }
 
@@ -238,3 +238,6 @@ html.scanning .page-head { margin: 0 calc(-1 * var(--pad)); padding-left: var(--
 .zoom-row { position: absolute; bottom: 14px; left: var(--pad); right: var(--pad); display: flex; align-items: center; gap: 12px; }
 .zoom-row .zoom-lab { font-family: var(--mono); font-size: 12px; min-width: 3.2em; text-align: right; color: var(--band-ink); text-shadow: 0 1px 2px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
 .zoom-row input[type="range"] { flex: 1; height: 44px; accent-color: var(--sealed); background: transparent; }
+
+/* The mark is a disc; keep it one on every surface. */
+img.mark { border-radius: 50%; display: block; }

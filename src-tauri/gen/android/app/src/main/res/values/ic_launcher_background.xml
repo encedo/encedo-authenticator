@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- rkv.pl green, the same tone the app paints with. -->
+    <color name="ic_launcher_background">#0F5F4B</color>
+    <color name="encedo_notification">#0F5F4B</color>
+</resources>

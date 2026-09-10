@@ -19,6 +19,19 @@
 #   scripts/macmini-ios-dev.sh <TEAM_ID>
 set -euo pipefail
 
+# codesign reads the signing key from the login keychain, which an ssh session
+# may not open ("User interaction is not allowed"). The Mac auto-logs in, so its
+# GUI session has the keychain unlocked: step into it and carry on there.
+if [ -n "${SSH_CONNECTION:-}" ] && [ -z "${ENCEDO_GUI_SESSION:-}" ]; then
+  if ! security show-keychain-info ~/Library/Keychains/login.keychain-db >/dev/null 2>&1; then
+    export ENCEDO_GUI_SESSION=1
+    exec sudo launchctl asuser "$(id -u)" sudo -u "$(whoami)" \
+      env ENCEDO_GUI_SESSION=1 APPLE_DEVELOPMENT_TEAM="${1:-${APPLE_DEVELOPMENT_TEAM:-}}" \
+      bash "$0" "$@"
+  fi
+fi
+[ -f ~/.zshenv ] && . ~/.zshenv 2>/dev/null
+
 TEAM="${1:-${APPLE_DEVELOPMENT_TEAM:-}}"
 if [ -z "$TEAM" ]; then
   echo "usage: macmini-ios-dev.sh <TEAM_ID>   (Xcode → Settings → Accounts → Personal Team)" >&2

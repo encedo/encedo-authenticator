@@ -1,0 +1,106 @@
+# Plan wydania v2 pod RKV
+
+Stan: 10 września 2026. Aplikacja na Androidzie ma parytet z v1 (`docs/PARITY.md`),
+push działa przez załatany backend. Encedo się zamyka, wydanie idzie z konta nowej
+firmy. Ten dokument opisuje drogę od działającego builda dev do dwóch sklepów.
+
+## Zasada
+
+Zmiana firmy dotyka czterech tożsamości i każda ciągnie za sobą inne skutki:
+nazwa pakietu (Play, App Store), projekt Firebase (push), klucz podpisu (ciągłość
+aktualizacji) i marka w tekstach. Wszystkie decyzje z fazy A muszą zapaść razem,
+bo każda osobno cofa pracę w kolejnych fazach.
+
+## Faza A — decyzje i konta (właściciel, blokuje resztę)
+
+| # | Decyzja | Warianty | Skutek |
+|---|---|---|---|
+| A1 | Listing w Google Play | (a) transfer `com.encedo.mobile.auth.android` na konto RKV; (b) nowy listing | (a) obecni użytkownicy dostają v2 jako aktualizację, klucz upload zostaje ten sam (`keystore.jks`); (b) nowa aplikacja, nowa nazwa pakietu, użytkownicy v1 zostają na v1 na zawsze |
+| A2 | Nazwa pakietu | `com.encedo.mobile.auth.android` albo `pl.rkv.authenticator` | wynika z A1; na iOS ta sama decyzja dla bundle id |
+| A3 | Nazwa produktu | „Encedo Authenticator” (produkt HEM nadal nazywa się Encedo) albo nowa | teksty w aplikacji, opisy w sklepach, ikona już zielona |
+| A4 | Konto Apple Developer | organizacja (wymaga numeru D-U-N-S, kilka dni) albo indywidualne | 99 USD/rok; organizacja wygląda poważniej w App Store i pozwala na więcej ról |
+| A5 | Projekt Firebase | nowy projekt na koncie RKV | nowe `google-services.json`, nowe konto serwisowe w backendzie, nowy `GoogleService-Info.plist` dla iOS |
+| A6 | Los starego projektu Firebase | trzymać N miesięcy czy zamknąć | telefony z v1 dostają push tylko dopóki stary projekt żyje i backend umie wysyłać z obu kont |
+| A7 | Polityka prywatności i regulamin | adres na rkv.pl | oba sklepy wymagają publicznego adresu przed publikacją |
+
+Bez A1–A3 nie ma sensu robić buildów produkcyjnych; bez A4 nie ma iOS.
+
+## Faza B — rebranding w kodzie (1–2 dni, po A1–A3)
+
+- Identyfikatory: `tauri.conf.json`, `tauri.android.conf.json`, `tauri.ios.conf.json`.
+  Zmiana nazwy pakietu wymaga skasowania i ponownego `tauri android init` / `ios init`,
+  bo Tauri trzyma nazwę w ścieżce katalogów Kotlina.
+- Teksty: nazwa produktu w mastheadzie, ekranie About, `productName`, nazwa w launcherze.
+- Ikony: zrobione (głowa z v1 w zieleni rkv.pl, launcher zwykły i adaptacyjny, monochrom,
+  ikona powiadomienia). Do sprawdzenia po zmianie nazwy: nic.
+- Firebase: `scripts/firebase-res.py` z nowym `google-services.json`; ten sam skrypt
+  omija plugin Gradle, więc warianty `.dev` dalej się budują.
+- Stopka: „© Encedo” → nowa firma, adres polityki prywatności.
+
+## Faza C — Android w Google Play (2–3 dni pracy, plus czas recenzji)
+
+1. Sekrety na Vostro: `keystore.jks` i `keystore.properties` w `~/secrets/encedo-authenticator/`
+   (przy wariancie A1a) albo nowy keystore (A1b). Sprawdzić w Play Console, czy konto ma
+   Play App Signing i czy `keystore.jks` to klucz upload.
+2. `scripts/vostro-release-aab.sh` → AAB, `versionCode` z `tauri.conf.json` (2000000+,
+   wyżej niż 100030 z v1).
+3. Play Console: opis, zrzuty (telefon, 8 sztuk z buildów dev), ikona 512×512,
+   grafika promocyjna 1024×500, ocena treści, formularz Data safety (odpowiedzi:
+   dane pozostają na urządzeniu, wysyłany jest tylko podpisany werdykt i token push),
+   polityka prywatności.
+4. Ścieżka: internal testing (właściciel + córka) → closed → produkcja.
+5. Przy wariancie A1a: pierwsza aktualizacja czyści dane v1 (`legacy.rs`) i prosi
+   o ponowne sparowanie. Warto to napisać w opisie aktualizacji.
+
+## Faza D — iOS (5–8 dni po A4)
+
+Stan: `tauri ios init` przeszedł na Mac Mini, projekt Xcode wygenerowany, build na
+symulator w toku. Brakuje trzech rzeczy, żeby aplikacja była kompletna:
+
+1. **Magazyn**: klucz danych na iOS leży dziś w pliku (`DevFileSecret`). Do zrobienia:
+   iOS-owa połowa pluginu `encedo-keystore` na Keychainie z `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
+2. **Push**: iOS-owa połowa `encedo-push` (Firebase iOS SDK albo APNs bezpośrednio;
+   przy FCM potrzebny klucz APNs `.p8` w konsoli Firebase i uprawnienie push w profilu).
+3. **Podpis**: konto z A4 w Xcode, profil provisioning, TestFlight. Na telefon córki
+   wystarczy darmowy Apple ID i profil na 7 dni, ale to zabawka: prawdziwy test to TestFlight.
+
+Reszta działa bez zmian: skaner (plugin ma część iOS), biometria (Face ID przez ten sam
+plugin), protokół i magazyn w Ruście, UI. `Info.ios.plist` ma już powody dostępu do
+kamery i Face ID, portret i tryb `remote-notification`.
+
+**App Review**: recenzent musi umieć sparować telefon. Bez dostępu do HEM utknie.
+Do przygotowania: konto testowe i osiągalny HEM z kodem QR w notatkach dla recenzenta,
+albo tryb demonstracyjny w aplikacji. Do rozstrzygnięcia przed pierwszym zgłoszeniem.
+
+## Faza E — backend (równolegle, właściciel)
+
+- `send_fcm_v2` z `tools/php-fcm-v1/` działa jako most; docelowo nadawca w Node.
+- Do wyjaśnienia: 404 z `/notify/subscribers/delete` (dotyczy Managera i telefonu,
+  więc unpair działa dziś tylko lokalnie).
+- Nowy endpoint `POST /notify/subscribers/token` (odświeżanie tokena push);
+  klient w aplikacji gotowy i toleruje jego brak.
+- Przy zmianie projektu Firebase: nowe konto serwisowe w nadawcy, ewentualnie
+  wysyłka z dwóch projektów przez czas życia v1.
+
+## Faza F — utwardzenie i domknięcie (2–3 dni)
+
+- CSP bez `unsafe-eval`, przegląd `capabilities`, logi bez sekretów (dziennik
+  diagnostyczny już nie zapisuje materiału kluczy).
+- Zdalne repo: dziś wstrzymane, bo w historii `main` leżą konfigi Firebase, a repo
+  jest publiczne. Przy okazji przeprowadzki: repo prywatne albo historia bez tych
+  plików (te klucze i tak przestaną być używane wraz ze starym projektem).
+- Usunąć odpytywanie co 15 s z ekranu Now, gdy push okaże się pewny.
+- Wersjonowanie z jednego źródła, notatki wydania.
+
+## Kolejność i czas
+
+```
+A (właściciel, dni–tygodnie)
+├── B (1–2 dni) ──> C (2–3 dni + recenzja Play)
+├── D (5–8 dni, wymaga A4) ──> TestFlight ──> App Store
+└── E (backend, równolegle)
+                    F (2–3 dni, przed publikacją)
+```
+
+Po stronie kodu to około dwóch tygodni pracy; kalendarz wyznaczą konta i recenzje
+sklepów. Android może wyjść pierwszy, iOS zaraz po nim.

@@ -65,7 +65,8 @@ npm run tauri -- ios init --ci
 cp "$SRC/src-tauri/gen/apple/tauri" src-tauri/gen/apple/tauri          # CLI shim the Xcode build phase needs
 mkdir -p src-tauri/gen/apple/assets
 cp "$SRC/src-tauri/gen/apple/assets/GoogleService-Info.plist" src-tauri/gen/apple/assets/ 2>/dev/null || true
-python3 scripts/ios-icons.py src-tauri/gen/apple >/dev/null
+# The square iOS icons are already generated in the repo; the Mac has no PIL.
+cp -R "$SRC/src-tauri/gen/apple/Assets.xcassets/." src-tauri/gen/apple/Assets.xcassets/ 2>/dev/null || true
 # A personal team cannot sign an app that asks for push.
 for f in src-tauri/gen/apple/*/*.entitlements; do
   /usr/libexec/PlistBuddy -c "Delete :aps-environment" "$f" 2>/dev/null || true
@@ -74,14 +75,18 @@ done
 export APPLE_DEVELOPMENT_TEAM="$TEAM"
 npm run tauri -- ios build --debug --target aarch64
 
-APP=$(ls -d src-tauri/gen/apple/build/arm64/*.app 2>/dev/null | head -1)
-[ -n "$APP" ] || { echo "no .app produced" >&2; exit 1; }
+# `tauri ios build` exports an .ipa; older versions leave a plain .app.
+APP=$(ls -d src-tauri/gen/apple/build/arm64/*.ipa src-tauri/gen/apple/build/arm64/*.app 2>/dev/null | head -1)
+[ -n "$APP" ] || { echo "nothing to install in build/arm64" >&2; exit 1; }
 echo "built: $APP  (dev build $N, bundle com.encedo.mobile.auth.ios.dev)"
 
-UDID=$(xcrun devicectl list devices 2>/dev/null | awk '/connected/ {print $(NF-1); exit}')
+UDID=$(xcrun xctrace list devices 2>/dev/null | awk '/^iPhone .*\(.*\) \(/ {gsub(/[()]/,"",$NF); print $NF; exit}')
 if [ -n "$UDID" ]; then
-  xcrun devicectl device install app --device "$UDID" "$APP"
-  echo "installed on $UDID"
+  xcrun devicectl device install app --device "$UDID" "$APP" | tail -3
+  echo
+  echo "On the iPhone, once per certificate: Settings → General → VPN & Device Management"
+  echo "→ Apple Development: <your Apple ID> → Trust. Until then iOS refuses to launch it."
+  echo "Then: xcrun devicectl device process launch --device $UDID com.encedo.mobile.auth.ios.dev"
 else
   echo "no iPhone connected; plug it in and run: xcrun devicectl device install app --device <udid> \"$APP\""
 fi

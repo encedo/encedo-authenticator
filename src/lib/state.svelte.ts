@@ -1,5 +1,5 @@
 import type { Settings } from "./api";
-import { api, ApiError, type AnswerView, type ArchiveEntry, type ModuleView, type Outcome, type PairingPreview, type RefreshReport, type RequestView } from "./api";
+import { api, ApiError, type AnswerView, type AuditHealth, type Family, type LogEntry, type ModuleView, type Outcome, type PairingPreview, type RefreshReport, type RequestView, type StoreStatus } from "./api";
 import { biometricAuth, inTauri, trace, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
 import * as mock from "./mock";
 
@@ -13,12 +13,12 @@ export type Screen =
   | { name: "pairConfirm"; preview: PairingPreview; raw: string }
   | { name: "request"; id: string }
   | { name: "result"; outcome: Outcome; title: string; detail?: string }
-  | { name: "archive"; pid?: string }
+  | { name: "history"; pid?: string }
   | { name: "settings" }
   | { name: "about" }
   | { name: "problem"; message: string; code?: string };
 
-export type Tab = "home" | "modules" | "archive" | "settings";
+export type Tab = "home" | "modules" | "history" | "settings";
 
 const SETTINGS_KEY = "encedo.settings.v2";
 
@@ -37,13 +37,18 @@ class AppState {
   screen = $state<Screen>({ name: "welcome" });
   modules = $state<ModuleView[]>(inTauri ? [] : mock.modules);
   pending = $state<RequestView[]>([]);
-  archive = $state<ArchiveEntry[]>(inTauri ? [] : mock.archive);
+  /** The journal, newest first: everything but the running commentary. */
+  log = $state<LogEntry[]>(inTauri ? [] : mock.journal);
+  /** The commentary, fetched only when the History screen asks for it. */
+  traceLog = $state<LogEntry[]>([]);
+  health = $state<AuditHealth | null>(null);
+  /** Whether the storage is open, and what protects its key. */
+  storeStatus = $state<StoreStatus | null>(null);
   online = $state(true);
   busy = $state(false);
   lastError = $state<string | null>(null);
   lastRefresh = $state<RefreshReport | null>(null);
   push = $state<PushState>({ status: inTauri ? "pending" : "unavailable" });
-  pushLog = $state<PushMessage[]>([]);
   ready = $state(!inTauri);
   /** Lock screen state. */
   unlocking = $state(false);
@@ -77,23 +82,83 @@ class AppState {
       else { const away = hiddenAt ? Date.now() - hiddenAt : 0; hiddenAt = 0; trace(`visibility visible away=${away}`); this.onLifecycle("resumed", away); }
     });
     try {
-      const [settings, modules, archive] = await Promise.all([api.settingsGet(), api.modules(), api.archive()]);
-      this.settings = settings;
-      this.modules = modules;
-      this.archive = archive;
-      this.screen = !settings.onboarded ? { name: "welcome" } : settings.biometric_lock ? { name: "lock" } : { name: "home" };
+      this.storeStatus = await api.storeStatus();
+      if (this.storeStatus.open) {
+        await this.loadStore();
+        this.screen = this.firstScreen();
+      } else {
+        // The storage key is bound to the person, so nothing can be read until
+        // the Locked screen has a confirmation.
+        this.screen = { name: "lock" };
+      }
     } catch (e) {
-      this.screen = { name: "problem", message: `Storage could not be opened: ${String((e as Error).message ?? e)}`, code: "storage" };
+      const err = e as ApiError;
+      this.screen = { name: "problem", message: err.message ?? `Storage could not be opened: ${String(e)}`, code: err.code ?? "storage" };
     } finally {
       this.ready = true;
     }
     this.push = await startPush({
       onToken: (token) => { this.push = { ...this.push, status: "registered", token }; void api.pushTokenChanged(token).catch(() => {}); },
-      onMessage: (m) => { this.pushLog = [m, ...this.pushLog].slice(0, 20); void this.onPush(m); },
+      onMessage: (m) => {
+        // The payload is evidence of what the module asked for, so it goes into
+        // the journal before anything is done about it; the History screen is
+        // where it is read back.
+        void api.logPush(m.title, m.body, Object.keys(m.data).length ? JSON.stringify(m.data) : undefined, !!m.tapped).catch(() => {});
+        void this.onPush(m);
+      },
       onLifecycle: (state, awayMs) => this.onLifecycle(state, awayMs),
     });
-    if (this.push.token) void api.pushTokenChanged(this.push.token).catch(() => {});
-    if (this.settings.onboarded && !this.settings.biometric_lock) void this.refresh();
+    if (this.push.token && this.storeStatus?.open) void api.pushTokenChanged(this.push.token).catch(() => {});
+    if (this.storeStatus?.open && this.settings.onboarded && !this.settings.biometric_lock) void this.refresh();
+  }
+
+  /** Everything the screens read, once the storage is open. */
+  private async loadStore() {
+    const [settings, modules, log] = await Promise.all([api.settingsGet(), api.modules(), api.log()]);
+    this.settings = settings;
+    this.modules = modules;
+    this.log = log;
+    void this.loadHealth();
+  }
+
+  private firstScreen(): Screen {
+    if (!this.settings.onboarded) return { name: "welcome" };
+    return this.settings.biometric_lock ? { name: "lock" } : { name: "home" };
+  }
+
+  /** Open the storage with a confirmation that has just been given. */
+  private async openStore(): Promise<boolean> {
+    try {
+      this.storeStatus = await api.storeOpen();
+      await this.loadStore();
+      if (this.push.token) void api.pushTokenChanged(this.push.token).catch(() => {});
+      return true;
+    } catch (e) {
+      const err = e as ApiError;
+      if (err.code === "key_lost") {
+        this.screen = { name: "problem", message: err.message, code: "key_lost" };
+      } else if (err.code === "auth_required") {
+        this.lockError = { code: err.code, message: "That confirmation is too old now. Confirm again." };
+      } else {
+        this.fail(e);
+      }
+      return false;
+    }
+  }
+
+  /** The key is gone: throw the unreadable store away and start over. */
+  async resetStorage() {
+    if (!inTauri) return;
+    this.busy = true;
+    try {
+      this.storeStatus = await api.storeReset();
+      await this.loadStore();
+      this.screen = this.firstScreen();
+    } catch (e) {
+      this.fail(e, "The storage could not be started over.");
+    } finally {
+      this.busy = false;
+    }
   }
 
   async onPush(m: PushMessage) {
@@ -111,7 +176,7 @@ class AppState {
       case "home": return "home";
       case "modules": case "module": case "pairConfirm": return "modules";
       case "pair": return null;
-      case "archive": return "archive";
+      case "history": return "history";
       case "settings": case "about": return "settings";
       default: return null;
     }
@@ -122,8 +187,45 @@ class AppState {
 
   fail(e: unknown, fallback = "Something went wrong.") {
     const err = e instanceof ApiError ? e : null;
+    // The storage is shut, not broken: a push woke the app while the phone was
+    // locked, or the confirmation timed out. Ask again instead of crying failure.
+    if (err?.code === "locked") {
+      void api.storeStatus().then((s) => (this.storeStatus = s)).catch(() => {});
+      this.lockNow();
+      return;
+    }
     this.lastError = err?.message ?? String((e as Error)?.message ?? fallback);
+    void this.logApp("app.failed", "Something went wrong", `${err?.code ?? "unknown"}: ${this.lastError}`);
     this.screen = { name: "problem", message: this.lastError, code: err?.code };
+  }
+
+  // ---- the journal -------------------------------------------------------
+
+  async loadLog() {
+    if (!inTauri) return;
+    try { this.log = await api.log(); } catch (e) { this.fail(e); }
+  }
+
+  async loadTrace() {
+    if (!inTauri) return;
+    try { this.traceLog = await api.log("trace" as Family); } catch { this.traceLog = []; }
+  }
+
+  async loadHealth() {
+    if (!inTauri) return;
+    this.health = await api.logVerify().catch(() => null);
+  }
+
+  async clearTrace() {
+    if (!inTauri) { this.traceLog = []; return; }
+    try { await api.logClearTrace(); } catch { /* nothing to clear */ }
+    await this.loadTrace();
+  }
+
+  /** Lifecycle, lock and failure events; the core refuses any other kind. */
+  private async logApp(kind: string, title: string, summary: string) {
+    if (!inTauri) return;
+    await api.logApp(kind, title, summary).catch(() => {});
   }
 
   async saveSettings() {
@@ -154,7 +256,14 @@ class AppState {
    *  because the webview only wakes up to read these on resume. */
   onLifecycle(state: "paused" | "resumed", awayMs: number) {
     trace(`lifecycle ${state} away=${awayMs} screen=${this.screen.name} unlocking=${this.unlocking} lock=${this.settings.biometric_lock}/${this.settings.lock_on_background} onboarded=${this.settings.onboarded}`);
-    if (state === "paused") return;
+    if (state === "paused") {
+      if (!this.unlocking) {
+        void this.logApp("app.background", "App left the screen", "");
+        void api.logFlush().catch(() => {});
+      }
+      return;
+    }
+    if (!this.unlocking) void this.logApp("app.foreground", "App came back", awayMs ? `away ${Math.round(awayMs / 1000)} s` : "");
     if (this.unlocking) return; // the biometric prompt itself pauses the activity
     const away = awayMs;
     const mustLock = this.settings.onboarded && this.settings.biometric_lock && this.settings.lock_on_background && away >= AppState.LOCK_AFTER_MS;
@@ -165,6 +274,7 @@ class AppState {
   lockNow() {
     const s = this.screen;
     if (s.name === "lock") return;
+    void this.logApp("app.locked", "Locked", "waiting for you to confirm");
     this.returnTo = s.name === "welcome" || s.name === "problem" || s.name === "pair" ? null : s;
     this.lockError = null;
     this.screen = { name: "lock" };
@@ -173,12 +283,21 @@ class AppState {
   /** Confirm the person with biometrics or the device credential, then carry on. */
   async unlock() {
     if (this.unlocking) return;
-    if (!inTauri || !this.settings.biometric_lock) { this.leaveLock(); return; }
+    // A closed storage has to be opened whatever the lock setting says: its key
+    // is bound to the person.
+    const closed = inTauri && this.storeStatus?.open === false;
+    if (!inTauri || (!this.settings.biometric_lock && !closed)) { this.leaveLock(); return; }
     this.unlocking = true;
     this.lockError = null;
     try {
       const r = await biometricAuth("Confirm it is you");
-      if (r.ok) { this.leaveLock(); return; }
+      if (r.ok) {
+        if (closed && !(await this.openStore())) return;
+        void this.logApp("app.unlocked", "Unlocked", closed ? "storage opened with your confirmation" : "confirmed on this phone");
+        this.leaveLock();
+        return;
+      }
+      void this.logApp("app.lock_failed", "Not unlocked", r.message ?? r.code ?? "not confirmed");
       if (r.code === "biometryNotEnrolled" || r.code === "noDeviceCredential" || r.code === "passcodeNotSet") {
         // Nothing on this phone can confirm the person: the lock cannot hold.
         this.settings.biometric_lock = false;
@@ -198,26 +317,39 @@ class AppState {
     void this.refresh(this.screen.name === "home");
   }
 
-  /** Turning the lock on means confirming once, with biometrics or the screen
-   *  lock; a phone with neither cannot hold a lock. Returns a message when it cannot. */
+  /** The lock is both the screen lock and the protection of the storage key, so
+   *  either direction needs one confirmation: turning it on binds the key to the
+   *  person, turning it off unbinds it. Returns a message when it cannot. */
   async setBiometricLock(on: boolean): Promise<string | null> {
-    if (on && inTauri) {
+    const revert = () => { this.settings.biometric_lock = !on; };
+    if (inTauri) {
       this.unlocking = true; // the prompt pauses the activity; do not treat the return as "came back"
       try {
-        const r = await biometricAuth("Confirm to turn the lock on");
+        const r = await biometricAuth(on ? "Confirm to turn the lock on" : "Confirm to turn the lock off");
         if (!r.ok) {
-          this.settings.biometric_lock = false;
-          await this.saveSettings();
-          if (r.code === "noDeviceCredential" || r.code === "passcodeNotSet" || r.code === "biometryNotEnrolled") return "This phone has no screen lock, so the app cannot lock itself. Set one in the system settings first.";
-          return r.message ?? "Not confirmed; the lock stays off.";
+          revert();
+          if (r.code === "noDeviceCredential" || r.code === "passcodeNotSet" || r.code === "biometryNotEnrolled") {
+            return "This phone has no screen lock, so the app cannot lock itself and cannot bind the storage key to you. Set one in the system settings first.";
+          }
+          return r.message ?? `Not confirmed; the lock stays ${on ? "off" : "on"}.`;
         }
       } finally {
         this.unlocking = false;
       }
     }
     this.settings.biometric_lock = on;
-    await this.saveSettings();
-    return null;
+    if (!inTauri) return null;
+    try {
+      await api.settingsSet($state.snapshot(this.settings));
+      this.storeStatus = await api.storeStatus();
+      return null;
+    } catch (e) {
+      revert();
+      const err = e as ApiError;
+      if (err.code === "no_credential") return "This phone has no screen lock, so the storage key cannot be bound to you.";
+      if (err.code === "auth_required") return "That confirmation is too old now. Try again.";
+      return err.message ?? "The setting could not be saved.";
+    }
   }
 
   module(pid: string): ModuleView | undefined { return this.modules.find((m) => m.pid === pid); }
@@ -225,7 +357,12 @@ class AppState {
 
   async reloadModules() {
     if (!inTauri) return;
-    try { [this.modules, this.archive] = await Promise.all([api.modules(), api.archive()]); } catch (e) { this.fail(e); }
+    try {
+      [this.modules, this.log] = await Promise.all([api.modules(), api.log()]);
+      void this.loadHealth();
+    } catch (e) {
+      this.fail(e);
+    }
   }
 
   /** Ask the broker what is waiting. Shows the first new request straight away. */
@@ -236,7 +373,7 @@ class AppState {
       const list = await api.refresh();
       this.online = true;
       this.pending = list;
-      this.archive = await api.archive();
+      this.log = await api.log();
       this.lastRefresh = await api.lastRefresh().catch(() => null);
       if (show && list.length && this.screen.name !== "request") this.screen = { name: "request", id: list[0].id };
     } catch (e) {
@@ -263,7 +400,7 @@ class AppState {
     if (!inTauri) {
       const detail = mock.summary(req, periodSecs, writable);
       this.pending = this.pending.filter((r) => r.id !== id);
-      this.archive = [{ id: `ar-${id}`, pid: req.pid, title: req.title, detail, outcome: allow ? "granted" : "denied", at: Math.floor(Date.now() / 1000) }, ...this.archive];
+      this.log = [mock.entry(allow ? "request.granted" : "request.denied", req.title, detail, req.pid, allow ? "granted" : "denied"), ...this.log];
       this.screen = { name: "result", outcome: allow ? "granted" : "denied", title: req.title, detail };
       return;
     }
@@ -271,8 +408,9 @@ class AppState {
     try {
       const a: AnswerView = allow ? await api.allow(id, periodSecs, writable) : await api.deny(id);
       this.pending = this.pending.filter((r) => r.id !== id);
-      this.archive = await api.archive();
+      this.log = await api.log();
       this.modules = await api.modules();
+      void this.loadHealth();
       this.screen = { name: "result", outcome: a.outcome, title: a.title, detail: a.detail };
     } catch (e) {
       this.pending = this.pending.filter((r) => r.id !== id);
@@ -309,7 +447,7 @@ class AppState {
   async completePairing(label: string, preview: PairingPreview) {
     if (!inTauri) {
       const pid = crypto.randomUUID();
-      this.modules = [...this.modules, { pid, label, host: preview.hostname, user: preview.user, email: preview.email, paired_at: Math.floor(Date.now() / 1000), last_used: null }];
+      this.modules = [...this.modules, { pid, aid: "mock-key-not-a-real-aid", label, host: preview.hostname, user: preview.user, email: preview.email, paired_at: Math.floor(Date.now() / 1000), last_used: null }];
       this.screen = { name: "result", outcome: "paired", title: "Pair this phone", detail: `${label} · ${preview.hostname}` };
       return;
     }
@@ -363,6 +501,22 @@ class AppState {
 }
 
 export const app = new AppState();
+
+/** Just the clock, for a row in the journal. */
+export function fmtTime(secs: number): string {
+  return new Date(secs * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** The heading above a run of entries: today, yesterday, or the date. */
+export function dayLabel(secs: number): string {
+  const d = new Date(secs * 1000);
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const days = Math.floor((midnight.getTime() - d.getTime()) / 86_400_000);
+  if (days < 0) return "Today";
+  if (days < 1) return "Yesterday";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+}
 
 export function fmtDate(secs: number): string {
   return new Date(secs * 1000).toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "numeric" });

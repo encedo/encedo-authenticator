@@ -54,9 +54,6 @@
             <div><dt>Address</dt><dd class="mono">{req.issuer.ip}</dd></div>
           {/if}
         </dl>
-        {#if req.ask_writable}
-          <div class="status-note">{writable ? "While the drive is unlocked read-write, its contents are as safe as the host." : "Read-only: the host can read the drive but not change it."}</div>
-        {/if}
       </div>
 
       {#if req.ask_period}
@@ -71,7 +68,7 @@
       {/if}
       {#if req.ask_writable}
         <div>
-          <Switch label="Allow writing" hint="The host may change the drive, not only read it" bind:checked={writable} />
+          <Switch label="Allow writing" hint={writable ? "While unlocked, the contents are as safe as the host" : "Read-only: the host may read the drive, not change it"} bind:checked={writable} />
         </div>
       {/if}
     </div>

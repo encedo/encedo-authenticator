@@ -2,7 +2,8 @@
 import { inTauri } from "./native";
 
 export interface ErrorView { code: string; message: string }
-export interface ModuleView { pid: string; label: string; host: string; user: string; email: string; paired_at: number; last_used: number | null }
+/** `aid` is the phone's public key for this module; v1 showed it as the KID. */
+export interface ModuleView { pid: string; aid: string; label: string; host: string; user: string; email: string; paired_at: number; last_used: number | null }
 export interface IpInfo { city: string; country: string; ip: string }
 export interface PairingPreview { link: string; user: string; hostname: string; email: string; issuer: IpInfo | null; already_paired: boolean }
 export interface Detail { label: string; value: string; mono: boolean }
@@ -11,10 +12,37 @@ export interface RequestView {
   kind: string; title: string; phrase: string; details: Detail[]; ask_period: boolean; ask_writable: boolean; writable_default: boolean; known: boolean;
 }
 export type Outcome = "granted" | "denied" | "expired" | "cancelled" | "rejected" | "error" | "paired" | "unpaired";
-export interface ArchiveEntry { id: string; pid: string; title: string; detail: string; outcome: Outcome; at: number }
+
+/** Which part of the app an entry came from. `trace` is the running commentary
+ *  and is only ever fetched by name. */
+export type Family = "answers" | "modules" | "push" | "broker" | "app" | "trace";
+export type Level = "good" | "plain" | "bad";
+export interface LogField { label: string; value: string; mono: boolean }
+export interface LogEntry {
+  id: string; at: number; ms: number; kind: string; family: Family; level: Level;
+  pid: string; title: string; summary: string; fields: LogField[]; raw: string | null;
+  outcome: Outcome | null;
+  /** Folded repeats: how many, and when the first of them was (`at` is the last). */
+  repeat: number; first_at: number | null;
+  /** Set on answers, pairings and pushes: the seal over the entry before this one. */
+  seal: string;
+}
+/** Whether the sealed chain still holds, and where it starts. */
+export interface AuditHealth { entries: number; pruned: number; broken_at: string | null }
 export interface AnswerView { outcome: Outcome; title: string; detail: string }
 export interface Settings { biometric_lock: boolean; lock_on_background: boolean; theme: "system" | "light" | "dark"; onboarded: boolean }
 export interface AppInfo { version: string; platform: string; broker: string }
+/** Whether the storage is open, and what protects its key on this phone. */
+export interface StoreStatus {
+  open: boolean;
+  /** The key only works within `window_seconds` of a confirmation. */
+  bound_to_user: boolean;
+  /** This phone has a screen lock, so binding is possible at all. */
+  credential: boolean;
+  /** The key lives in a separate secure element, not only the TEE. */
+  strong_box: boolean;
+  window_seconds: number;
+}
 export interface RefreshReport { at: number; pids: string[]; broker_said: string; pending: number; shown: number; discarded: string[]; error: string | null }
 
 export class ApiError extends Error {
@@ -35,10 +63,21 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 export const api = {
   available: inTauri,
   appInfo: () => call<AppInfo>("app_info"),
+  storeStatus: () => call<StoreStatus>("store_status"),
+  storeOpen: () => call<StoreStatus>("store_open"),
+  storeReset: () => call<StoreStatus>("store_reset"),
   settingsGet: () => call<Settings>("settings_get"),
   settingsSet: (settings: Settings) => call<void>("settings_set", { settings }),
   modules: () => call<ModuleView[]>("modules_list"),
-  archive: () => call<ArchiveEntry[]>("archive_list"),
+  log: (family?: Family) => call<LogEntry[]>("log_list", { family }),
+  logVerify: () => call<AuditHealth>("log_verify"),
+  logClearTrace: () => call<void>("log_clear_trace"),
+  /** A push arrived or was tapped; only the webview sees the notification text. */
+  logPush: (title: string | undefined, body: string | undefined, data: string | undefined, tapped: boolean) => call<void>("log_push", { title, body, data, tapped }),
+  /** Lifecycle and lock events. The core refuses anything not on its list. */
+  logApp: (kind: string, title: string, summary: string) => call<void>("log_app", { kind, title, summary }),
+  /** Going to the background: write out what the commentary has collected. */
+  logFlush: () => call<void>("log_flush"),
   pairScan: (raw: string) => call<PairingPreview>("pair_scan", { raw }),
   pairConfirm: (label: string, fid?: string) => call<ModuleView>("pair_confirm", { label, fid }),
   pairRefuse: (fid?: string) => call<void>("pair_refuse", { fid }),

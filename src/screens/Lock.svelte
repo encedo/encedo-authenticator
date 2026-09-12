@@ -2,6 +2,9 @@
   import { onMount } from "svelte";
   import { app, count } from "../lib/state.svelte";
   import Mark from "../lib/Mark.svelte";
+  // Before the storage is open nothing has been read yet, not even the settings:
+  // the key itself waits for the confirmation.
+  const closed = $derived(app.storeStatus?.open === false);
   onMount(() => {
     // Give the activity a moment to be in front before the system prompt.
     const t = setTimeout(() => void app.unlock(), 250);
@@ -15,11 +18,13 @@
       <Mark size={44} />
       <div class="page-head" style="padding-top:0">
         <p class="eyebrow" class:exposed={!!app.lockError} class:muted={!app.lockError}>{app.lockError ? "Not confirmed" : "Locked"}</p>
-        <h1>{app.pending.length ? `${count(app.pending.length, "request")} waiting for you.` : "Nothing is waiting for you."}</h1>
+        <h1>{closed ? "This phone is locked." : app.pending.length ? `${count(app.pending.length, "request")} waiting for you.` : "Nothing is waiting for you."}</h1>
         {#if app.lockError}
           <p>{app.lockError.message}</p>
         {:else if app.unlocking}
           <p>Confirm it is you with your fingerprint, face or screen lock.</p>
+        {:else if closed}
+          <p>Your keys and history are sealed with a key this phone only releases after you confirm. Nothing has been read yet.</p>
         {:else}
           <p>Unlock to see who is asking and for what.</p>
         {/if}

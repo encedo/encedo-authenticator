@@ -20,7 +20,7 @@ export function openDemo(d: string | null, theme?: string | null) {
     case "module": app.go({ name: "module", pid: first.pid }); break;
     case "pair": app.go({ name: "pair" }); break;
     case "pair-confirm": void app.scanned(JSON.stringify({ link: "https://api.encedo.com/notify/pairing/3f9a…", user: "chris", hostname: "hem-wh.encedo.local", email: "chris@encedo.com" })); break;
-    case "archive": app.go({ name: "archive" }); break;
+    case "history": app.go({ name: "history" }); break;
     case "settings": app.go({ name: "settings" }); break;
     case "about": app.go({ name: "about" }); break;
     case "granted": app.go({ name: "result", outcome: "granted", title: "Unlock a drive", detail: "disk0 · read-write · 1 h" }); break;

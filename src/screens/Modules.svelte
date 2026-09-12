@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app, count, fmtDate, shortPid } from "../lib/state.svelte";
   import Masthead from "../lib/Masthead.svelte";
+  import Help from "../lib/Help.svelte";
 </script>
 
 <div class="screen">
@@ -8,8 +9,15 @@
   <div class="screen-body">
     <div class="page-head">
       <p class="eyebrow">Paired modules</p>
-      <h1>{app.modules.length ? `${count(app.modules.length, "module")} can ask you.` : "No module can ask you yet."}</h1>
-      <p>A paired module sends its requests to this phone. Unpairing removes the phone from the module's keychain as well.</p>
+      <h1>{app.modules.length ? `${count(app.modules.length, "module")} can ask you.` : "No module can ask you yet."}
+        <Help
+          label="About paired modules"
+          parts={[
+            { term: "Pairing", text: "A paired module sends its requests to this phone. Open the Manager, choose Paired phones, and scan the code it shows." },
+            { term: "Unpairing", text: "Removes this phone from the module's keychain as well, so requests stop at once." },
+          ]}
+        />
+      </h1>
     </div>
     <div class="card">
       <div class="card-head"><span>Paired</span><span class="v">{count(app.modules.length, "module").toLowerCase()}</span></div>

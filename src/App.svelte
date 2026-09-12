@@ -10,7 +10,7 @@
   import PairConfirm from "./screens/PairConfirm.svelte";
   import Request from "./screens/Request.svelte";
   import Result from "./screens/Result.svelte";
-  import Archive from "./screens/Archive.svelte";
+  import History from "./screens/History.svelte";
   import Settings from "./screens/Settings.svelte";
   import About from "./screens/About.svelte";
   import Problem from "./screens/Problem.svelte";
@@ -31,7 +31,7 @@
   {:else if s.name === "pairConfirm"}<PairConfirm preview={s.preview} raw={s.raw} />
   {:else if s.name === "request"}<Request id={s.id} />
   {:else if s.name === "result"}<Result outcome={s.outcome} title={s.title} detail={s.detail} />
-  {:else if s.name === "archive"}<Archive pid={s.pid} />
+  {:else if s.name === "history"}<History pid={s.pid} />
   {:else if s.name === "settings"}<Settings />
   {:else if s.name === "about"}<About />
   {:else if s.name === "problem"}<Problem message={s.message} code={s.code} />

@@ -5,6 +5,10 @@ edition = "2021"
 publish = false
 description = "Encedo notify protocol as spoken by the v1 app: X25519, HMAC-SHA256, AES-128-CBC, JWT HS256"
 
+[features]
+# The module side of the protocol (`hem`), for tests and simulators only.
+hem = []
+
 [dependencies]
 x25519-dalek = { version = "2", features = ["static_secrets", "zeroize"] }
 hmac = "0.12"

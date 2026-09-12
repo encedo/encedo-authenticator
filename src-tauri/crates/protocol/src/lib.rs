@@ -5,6 +5,8 @@
 
 pub mod codec;
 pub mod event;
+#[cfg(any(test, feature = "hem"))]
+pub mod hem;
 pub mod jwt;
 pub mod keys;
 pub mod pairing;

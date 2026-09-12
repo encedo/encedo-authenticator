@@ -149,3 +149,11 @@ pub fn allow(event: &Event, app: &KeyPair, eid_b64: &str, pid: &str, scope: &str
 
 /// Access periods offered by the UI, in seconds. v1: 15 min default, 1 h, 8 h, 24 h.
 pub const PERIODS: [u64; 4] = [15 * 60, 60 * 60, 8 * 60 * 60, 24 * 60 * 60];
+
+/// Seal `scope` the way a module does when it issues an event: the other end of
+/// [`open_scope`], under the same session key. Only for the `hem` simulator and
+/// this crate's own tests; a phone never seals an event.
+#[cfg(any(test, feature = "hem"))]
+pub fn seal_scope(module: &KeyPair, phone_public: &[u8; 32], jti: &str, scope: &str) -> Result<String> {
+    Ok(Session::derive(module, phone_public, jti)?.seal(scope))
+}

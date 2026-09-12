@@ -4,8 +4,8 @@
 use serde::Serialize;
 use tauri::State;
 
-use crate::core::{AnswerView, Core, ErrorView, ModuleView, PairingPreview, RefreshReport, RequestView};
-use crate::store::{ArchiveEntry, Settings};
+use crate::core::{AnswerView, Core, ErrorView, ModuleView, PairingPreview, RefreshReport, RequestView, StoreStatus};
+use crate::store::{AuditHealth, Family, LogEntry, Settings};
 
 type Res<T> = Result<T, ErrorView>;
 
@@ -33,6 +33,35 @@ pub fn trace(msg: String) {
     eprintln!("[encedo] {msg}");
 }
 
+/// Is the storage open, and what protects its key. The only command that works
+/// before the storage is open, because the webview needs it to decide what to show.
+#[tauri::command]
+pub fn store_status(core: State<'_, Core>) -> StoreStatus {
+    core.status()
+}
+
+/// Open the storage. Call it after the person has confirmed who they are: a key
+/// bound to them is refused until then (`auth_required`), and a key that is gone
+/// says so (`key_lost`).
+#[tauri::command]
+pub fn store_open(app: tauri::AppHandle, core: State<'_, Core>) -> Res<StoreStatus> {
+    let first = !core.is_open();
+    map(core.open_storage())?;
+    if first {
+        let _ = core.opened(&app.package_info().version.to_string());
+    }
+    Ok(core.status())
+}
+
+/// Throw away a store whose key is gone and start clean. Everything paired
+/// before this is lost; the journal says so as its first line.
+#[tauri::command]
+pub fn store_reset(app: tauri::AppHandle, core: State<'_, Core>) -> Res<StoreStatus> {
+    map(core.reset())?;
+    let _ = core.opened(&app.package_info().version.to_string());
+    Ok(core.status())
+}
+
 #[tauri::command]
 pub fn settings_get(core: State<'_, Core>) -> Res<Settings> {
     map(core.settings())
@@ -48,9 +77,45 @@ pub fn modules_list(core: State<'_, Core>) -> Res<Vec<ModuleView>> {
     map(core.modules())
 }
 
+/// The journal, newest first. `family` is one of the names [`Family`] serialises
+/// to; without it, everything except the running commentary.
 #[tauri::command]
-pub fn archive_list(core: State<'_, Core>) -> Res<Vec<ArchiveEntry>> {
-    map(core.archive_list())
+pub fn log_list(core: State<'_, Core>, family: Option<String>) -> Res<Vec<LogEntry>> {
+    let family = match family.as_deref() {
+        None | Some("") | Some("all") => None,
+        Some(name) => Some(serde_json::from_value::<Family>(serde_json::Value::String(name.into())).map_err(|_| ErrorView { code: "state".into(), message: format!("no such part of the log: {name}") })?),
+    };
+    map(core.journal(family))
+}
+
+/// Whether the sealed chain of answers and pairings still holds.
+#[tauri::command]
+pub fn log_verify(core: State<'_, Core>) -> Res<AuditHealth> {
+    map(core.audit_health())
+}
+
+/// Drop the running commentary. Sealed entries stay.
+#[tauri::command]
+pub fn log_clear_trace(core: State<'_, Core>) -> Res<()> {
+    map(core.clear_trace())
+}
+
+/// A push arrived or was tapped: only the webview sees the notification text.
+#[tauri::command]
+pub fn log_push(core: State<'_, Core>, title: Option<String>, body: Option<String>, data: Option<String>, tapped: bool) -> Res<()> {
+    map(core.log_push(title, body, data, tapped))
+}
+
+/// Lifecycle and lock events, which only the webview can see.
+#[tauri::command]
+pub fn log_app(core: State<'_, Core>, kind: String, title: String, summary: String) -> Res<()> {
+    map(core.log_app(&kind, &title, &summary))
+}
+
+/// Going to the background: write out what the commentary has collected.
+#[tauri::command]
+pub fn log_flush(core: State<'_, Core>) -> Res<()> {
+    map(core.flush())
 }
 
 #[tauri::command]

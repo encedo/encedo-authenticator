@@ -8,6 +8,9 @@
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:theme="@style/Theme.encedo_authenticator"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity

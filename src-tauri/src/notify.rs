@@ -85,11 +85,25 @@ impl PairingCode {
         } else {
             serde_json::from_str(raw).map_err(|_| NotifyError::BadResponse("this code is not an Encedo pairing code".into()))?
         };
-        if !code.link.starts_with("https://") {
+        if !link_allowed(&code.link) {
             return Err(NotifyError::BadResponse("the pairing link is not https".into()));
         }
         Ok(code)
     }
+}
+
+/// The pairing link must be https. The one exception is a broker on this
+/// device, which is how `ENCEDO_BROKER` points the app at a local one in
+/// development and how the core tests run theirs; a code naming 127.0.0.1
+/// reaches nothing that is not already inside the phone. Matched on the whole
+/// host, never as a prefix, so `http://127.0.0.1.example.com/` stays refused.
+fn link_allowed(link: &str) -> bool {
+    if link.starts_with("https://") {
+        return true;
+    }
+    let Some(rest) = link.strip_prefix("http://") else { return false };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    matches!(authority.split(':').next().unwrap_or_default(), "127.0.0.1" | "localhost")
 }
 
 /// `GET link`.
@@ -283,6 +297,11 @@ mod tests {
         let c = PairingCode::parse(r#"{"link":"https://api.encedo.com/notify/pairing/abc","user":"chris","hostname":"my.ence.do"}"#).unwrap();
         assert_eq!(c.hostname, "my.ence.do");
         assert_eq!(c.email, "");
+        // A broker on this device is the one exception (`ENCEDO_BROKER`, tests).
+        assert!(PairingCode::parse(r#"{"link":"http://127.0.0.1:1420/notify/pairing/abc"}"#).is_ok());
+        assert!(PairingCode::parse(r#"{"link":"http://vostro/notify/pairing/abc"}"#).is_err());
+        // A host that only begins with the loopback address is a different host.
+        assert!(PairingCode::parse(r#"{"link":"http://127.0.0.1.example.com/notify/pairing/abc"}"#).is_err());
         let bare = PairingCode::parse(" https://api.encedo.com/notify/pairing/abc \n").unwrap();
         assert_eq!(bare.link, "https://api.encedo.com/notify/pairing/abc");
         assert!(PairingCode::parse("hello").is_err());

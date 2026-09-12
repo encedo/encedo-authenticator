@@ -27,6 +27,11 @@ sha2 = "0.10"
 zeroize = { version = "1", features = ["derive"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 
+[dev-dependencies]
+# The tests run a broker on 127.0.0.1 and answer as a module would.
+tokio = { version = "1", features = ["rt", "macros", "net", "io-util", "time"] }
+encedo-protocol = { version = "0.1.0", path = "crates/protocol", features = ["hem"] }
+
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-barcode-scanner = { path = "plugins/barcode-scanner" }
 tauri-plugin-encedo-push = { path = "plugins/encedo-push" }

@@ -15,8 +15,8 @@ bo każda osobno cofa pracę w kolejnych fazach.
 
 | # | Decyzja | Warianty | Skutek |
 |---|---|---|---|
-| A1 | Listing w Google Play | (a) transfer `com.encedo.mobile.auth.android` na konto RKV; (b) nowy listing | (a) obecni użytkownicy dostają v2 jako aktualizację, klucz upload zostaje ten sam (`keystore.jks`); (b) nowa aplikacja, nowa nazwa pakietu, użytkownicy v1 zostają na v1 na zawsze |
-| A2 | Nazwa pakietu | `com.encedo.mobile.auth.android` albo `pl.rkv.authenticator` | wynika z A1; na iOS ta sama decyzja dla bundle id |
+| A1 | Listing w Google Play | **zdecydowane 13 września 2026: nowy listing**. RKV jest właścicielem Encedo, więc marka zostaje, ale v2 wchodzi jako osobna pozycja | v1 żyje obok do wygaszenia; użytkownicy v1 **nie** dostaną v2 automatycznie, muszą zainstalować ją sami; potrzebny **nowy klucz upload** (ten z v1 dotyczy tamtego listingu) |
+| A2 | Nazwa pakietu | **zdecydowane: `com.encedo.mobile.auth.android.v2`**, na iOS `com.encedo.mobile.auth.ios.v2` | obie wersje mogą stać na jednym telefonie; na Androidzie wystarczyła zmiana `applicationId` (przestrzeń nazw Kotlina zostaje, więc nic nie trzeba regenerować), na iOS `project.yml` i projekt Xcode |
 | A3 | Nazwa produktu | **zdecydowane 13 września 2026: „Encedo HEM Authenticator”** | w aplikacji, w `tauri.conf.json`, w `strings.xml`, w `Info.ios.plist` i w notce licencyjnej; wydawcą jest RKV, nazwa produktu została przy Encedo HEM |
 | A4 | Konto Apple Developer | organizacja (wymaga numeru D-U-N-S, kilka dni) albo indywidualne | 99 USD/rok; organizacja wygląda poważniej w App Store i pozwala na więcej ról |
 | A5 | Projekt Firebase | nowy projekt na koncie RKV | nowe `google-services.json`, nowe konto serwisowe w backendzie, nowy `GoogleService-Info.plist` dla iOS |
@@ -49,8 +49,14 @@ Bez A1–A3 nie ma sensu robić buildów produkcyjnych; bez A4 nie ma iOS.
    dane pozostają na urządzeniu, wysyłany jest tylko podpisany werdykt i token push),
    polityka prywatności.
 4. Ścieżka: internal testing (właściciel + córka) → closed → produkcja.
-5. Przy wariancie A1a: pierwsza aktualizacja czyści dane v1 (`legacy.rs`) i prosi
-   o ponowne sparowanie. Warto to napisać w opisie aktualizacji.
+5. v2 to osobny pakiet, więc **nie widzi danych v1** (inny katalog aplikacji) i
+   `legacy.rs` nic tam nie sprząta — v1 zostaje na telefonie, dopóki właściciel jej
+   nie odinstaluje. W opisie w Play warto napisać wprost: zainstaluj v2, sparuj
+   moduły na nowo, a v1 usuń, gdy wszystko działa. Do rozważenia przy wygaszaniu
+   v1: aktualizacja v1, która mówi, gdzie jest następca.
+6. W projekcie Firebase (A5) potrzebne wpisy aplikacji dla nowych identyfikatorów
+   `…android.v2` i `…ios.v2`; `scripts/firebase-res.py` omija plugin Gradle, więc
+   build zadziała nawet przed ich dodaniem, ale push pójdzie dopiero z nimi.
 
 ## Faza D — iOS (5–8 dni po A4)
 

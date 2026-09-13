@@ -25,7 +25,7 @@ cat > src-tauri/tauri.android.conf.json <<JSON
   "bundle": { "android": { "versionCode": $CODE } }
 }
 JSON
-sed -i 's/applicationId = "com.encedo.mobile.auth.android"/applicationId = "com.encedo.mobile.auth.android.dev"/' src-tauri/gen/android/app/build.gradle.kts
+sed -i 's/applicationId = "com.encedo.mobile.auth.android.v2"/applicationId = "com.encedo.mobile.auth.android.dev"/' src-tauri/gen/android/app/build.gradle.kts
 sed -i 's/<string name="app_name">[^<]*<\/string>/<string name="app_name">Encedo HEM Auth dev<\/string>/; s/<string name="main_activity_title">[^<]*<\/string>/<string name="main_activity_title">Encedo HEM Auth dev<\/string>/' src-tauri/gen/android/app/src/main/res/values/strings.xml
 [ -f src-tauri/gen/android/app/src/main/res/values/firebase.xml ] || { echo "missing firebase.xml: run scripts/firebase-res.py first"; exit 1; }
 args=(); for t in ${TARGETS[@]}; do args+=(--target "$t"); done

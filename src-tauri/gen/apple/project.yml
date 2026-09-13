@@ -1,6 +1,6 @@
 name: encedo-authenticator
 options:
-  bundleIdPrefix: com.encedo.mobile.auth.ios
+  bundleIdPrefix: com.encedo.mobile.auth.ios.v2
   deploymentTarget:
     iOS: 14.0
 fileGroups: [../../src]
@@ -10,8 +10,8 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: Encedo Authenticator
-      PRODUCT_BUNDLE_IDENTIFIER: com.encedo.mobile.auth.ios
+      PRODUCT_NAME: Encedo HEM Authenticator
+      PRODUCT_BUNDLE_IDENTIFIER: com.encedo.mobile.auth.ios.v2
 targetTemplates:
   app:
     type: application

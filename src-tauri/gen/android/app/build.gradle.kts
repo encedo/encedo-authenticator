@@ -27,7 +27,7 @@ android {
     namespace = "com.encedo.mobile.auth.android"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.encedo.mobile.auth.android"
+        applicationId = "com.encedo.mobile.auth.android.v2"
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

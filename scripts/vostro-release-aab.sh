@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Production build for Google Play: package com.encedo.mobile.auth.android,
+# Production build for Google Play: package com.encedo.mobile.auth.android.v2,
 # signed with the upload key from keystore.jks. Run on vostro after rsync.
 # Needs, outside the repo, on vostro:
 #   ~/secrets/encedo-authenticator/keystore.jks

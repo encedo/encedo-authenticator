@@ -62,13 +62,15 @@
         <span class="v">{publisher.name}</span>
       </div>
       <dl class="status-grid">
-        <div><dt>Legal name</dt><dd class:pending={!publisher.legal}>{publisher.legal || "not settled"}</dd></div>
-        <div><dt>Contact</dt><dd class:pending={!publisher.contact}>{publisher.contact || "not settled"}</dd></div>
+        <div class="wide"><dt>Legal name</dt><dd class:pending={!publisher.legal}>{publisher.legal || "not settled"}</dd></div>
+        <div class="wide"><dt>Registered address</dt><dd class:pending={!publisher.address}>{publisher.address || "not settled"}</dd></div>
+        <div class="wide"><dt>Register</dt><dd class="mono" class:pending={!publisher.registration}>{publisher.registration || "not settled"}</dd></div>
+        <div class="wide"><dt>Contact</dt><dd class="mono" class:pending={!publisher.contact}>{publisher.contact || "not settled"}</dd></div>
         <div class="wide"><dt>Privacy policy</dt><dd class:pending={!publisher.privacy}>{publisher.privacy || "not settled"}</dd></div>
         {#if publisher.terms}<div class="wide"><dt>Terms</dt><dd>{publisher.terms}</dd></div>{/if}
       </dl>
       {#if missing.length}
-        <div class="status-note">Before a store will take this app: {missing.join(", ")}. The company move decides them (see the release plan).</div>
+        <div class="status-note">Before a store will take this app: {missing.join(", ")}. Nothing else is outstanding on the publisher's side.</div>
       {/if}
     </div>
 

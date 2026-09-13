@@ -4,10 +4,10 @@
 <dict>
 	<!-- The scanner reads the Manager's pairing code; nothing else uses the camera. -->
 	<key>NSCameraUsageDescription</key>
-	<string>Encedo Authenticator reads the pairing code your Encedo Manager shows.</string>
+	<string>Encedo HEM Authenticator reads the pairing code your Encedo Manager shows.</string>
 	<!-- The app lock; the device passcode is the fallback. -->
 	<key>NSFaceIDUsageDescription</key>
-	<string>Encedo Authenticator asks who you are before it answers a module.</string>
+	<string>Encedo HEM Authenticator asks who you are before it answers a module.</string>
 	<!-- One column of decisions: portrait only, like the Android build. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>

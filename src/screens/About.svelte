@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { app } from "../lib/state.svelte";
   import { api } from "../lib/api";
-  import { missingForStore, publisher } from "../lib/publisher";
+  import { missingForStore, product, publisher } from "../lib/publisher";
   import Masthead from "../lib/Masthead.svelte";
   import Help from "../lib/Help.svelte";
   import { inTauri } from "../lib/native";
@@ -38,7 +38,7 @@
     </div>
 
     <div class="card">
-      <div class="card-head"><span>This app</span><span class="v mono">{info.version}</span></div>
+      <div class="card-head"><span>{product}</span><span class="v mono">{info.version}</span></div>
       <dl class="status-grid">
         <div><dt>Platform</dt><dd class="mono">{info.platform}</dd></div>
         <div><dt>Made for</dt><dd>Encedo HEM</dd></div>

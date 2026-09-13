@@ -105,7 +105,7 @@ export async function biometricAuth(reason: string): Promise<{ ok: boolean; code
   if (!inTauri) return { ok: true };
   try {
     const b = await import("@tauri-apps/plugin-biometric");
-    await b.authenticate(reason, { allowDeviceCredential: true, title: "Encedo Authenticator", subtitle: reason, cancelTitle: "Cancel", confirmationRequired: false });
+    await b.authenticate(reason, { allowDeviceCredential: true, title: "Encedo HEM Authenticator", subtitle: reason, cancelTitle: "Cancel", confirmationRequired: false });
     return { ok: true };
   } catch (e) {
     const err = e as { code?: string; message?: string } | string;

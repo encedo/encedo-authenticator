@@ -17,7 +17,7 @@ bo każda osobno cofa pracę w kolejnych fazach.
 |---|---|---|---|
 | A1 | Listing w Google Play | (a) transfer `com.encedo.mobile.auth.android` na konto RKV; (b) nowy listing | (a) obecni użytkownicy dostają v2 jako aktualizację, klucz upload zostaje ten sam (`keystore.jks`); (b) nowa aplikacja, nowa nazwa pakietu, użytkownicy v1 zostają na v1 na zawsze |
 | A2 | Nazwa pakietu | `com.encedo.mobile.auth.android` albo `pl.rkv.authenticator` | wynika z A1; na iOS ta sama decyzja dla bundle id |
-| A3 | Nazwa produktu | „Encedo Authenticator” (produkt HEM nadal nazywa się Encedo) albo nowa | teksty w aplikacji, opisy w sklepach, ikona już zielona |
+| A3 | Nazwa produktu | **zdecydowane 13 września 2026: „Encedo HEM Authenticator”** | w aplikacji, w `tauri.conf.json`, w `strings.xml`, w `Info.ios.plist` i w notce licencyjnej; wydawcą jest RKV, nazwa produktu została przy Encedo HEM |
 | A4 | Konto Apple Developer | organizacja (wymaga numeru D-U-N-S, kilka dni) albo indywidualne | 99 USD/rok; organizacja wygląda poważniej w App Store i pozwala na więcej ról |
 | A5 | Projekt Firebase | nowy projekt na koncie RKV | nowe `google-services.json`, nowe konto serwisowe w backendzie, nowy `GoogleService-Info.plist` dla iOS |
 | A6 | Los starego projektu Firebase | trzymać N miesięcy czy zamknąć | telefony z v1 dostają push tylko dopóki stary projekt żyje i backend umie wysyłać z obu kont |

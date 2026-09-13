@@ -5,7 +5,7 @@
 
 <div class="masthead">
   <Mark />
-  <span><b>Encedo</b> Authenticator</span>
+  <span><b>Encedo HEM</b> Authenticator</span>
   {#if back}
     <button class="button plain small back" onclick={back}>
       <svg viewBox="0 0 20 20"><path d="M12 4 6 10l6 6" /></svg>

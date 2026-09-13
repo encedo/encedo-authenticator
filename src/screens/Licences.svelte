@@ -4,7 +4,7 @@
   import Masthead from "../lib/Masthead.svelte";
   import Help from "../lib/Help.svelte";
   import { copyText } from "../lib/native";
-  import { publisher } from "../lib/publisher";
+  import { product } from "../lib/publisher";
 
   interface Item { n: string; v: string; l: string; c?: string; u?: string }
   interface Group { id: string; short: string; name: string; items: Item[] }
@@ -45,7 +45,7 @@
 
   async function copyAll() {
     if (!data) return;
-    const lines = [`${publisher.name} Authenticator — open source libraries (${data.generated})`, ""];
+    const lines = [`${product} — open source libraries (${data.generated})`, ""];
     for (const g of data.groups) {
       lines.push(`## ${g.name}`);
       for (const i of g.items) lines.push(`${i.n} ${i.v} — ${i.l}${i.c ? ` — ${i.c}` : ""}`);

@@ -65,7 +65,7 @@
       <p class="eyebrow" class:exposed={status === "denied" || status === "error"}>Pair a module</p>
       {#if status === "denied"}
         <h1>The camera is off limits.</h1>
-        <p>Allow the camera for Encedo Authenticator in the system settings, then come back.</p>
+        <p>Allow the camera for Encedo HEM Authenticator in the system settings, then come back.</p>
       {:else if status === "error"}
         <h1>The camera did not start.</h1>
         <p class="mono" style="font-size:12.5px">{error}</p>

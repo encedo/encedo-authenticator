@@ -9,7 +9,7 @@
   <Masthead />
   <div class="screen-body">
     <div class="page-head">
-      <p class="eyebrow">Encedo Authenticator</p>
+      <p class="eyebrow">Encedo HEM Authenticator</p>
       <h1>This phone will answer for your module.
         <Help
           label="How this works"

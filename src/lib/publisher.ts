@@ -6,6 +6,9 @@
 // empty rather than guessed, and the About screen says which of those a store
 // will still ask for.
 
+/** The name of the app itself, which is not the name of the company (PLAN-RKV, A3). */
+export const product = "Encedo HEM Authenticator";
+
 export interface Publisher {
   /** The short name, as it reads in the app. */
   name: string;

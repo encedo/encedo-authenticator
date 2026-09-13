@@ -54,7 +54,7 @@ npm run build >/dev/null
 cat > src-tauri/tauri.ios.conf.json <<JSON
 {
   "identifier": "com.encedo.mobile.auth.ios.dev",
-  "productName": "Encedo Auth dev",
+  "productName": "Encedo HEM Auth dev",
   "version": "2.0.0-dev.$N",
   "bundle": { "iOS": { "developmentTeam": "$TEAM" } }
 }

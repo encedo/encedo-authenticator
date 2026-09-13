@@ -22,7 +22,11 @@
   const window = $derived(
     app.storeStatus?.window_seconds ? `for ${app.storeStatus.window_seconds} s after your confirmation` : "only when you confirm, every time",
   );
-  const themes = ["system", "light", "dark"] as const;
+  const themes: { id: "light" | "dark" | "system"; label: string }[] = [
+    { id: "light", label: "Light" },
+    { id: "dark", label: "Dark" },
+    { id: "system", label: "System" },
+  ];
   const heading = $derived(
     app.settings.biometric_lock ? "This phone asks who you are before it answers." : "This phone answers without asking who you are.",
   );
@@ -49,6 +53,16 @@
       <Switch label="Lock with biometrics" hint="On launch, and it binds the storage key to you" bind:checked={app.settings.biometric_lock} onchange={async () => { lockNote = await app.setBiometricLock(app.settings.biometric_lock); }} />
       <Switch label="Lock when in background" hint="Ask again after switching apps" bind:checked={app.settings.lock_on_background} onchange={() => app.saveSettings()} />
     </div>
+    <div class="field">
+      <span class="label">Appearance</span>
+      <div class="segmented" role="group" aria-label="Appearance">
+        {#each themes as t}
+          <button aria-pressed={app.settings.theme === t.id} onclick={() => { app.settings.theme = t.id; void app.saveSettings(); }}>{t.label}</button>
+        {/each}
+      </div>
+      <span class="hint">System follows the phone, and is what this app starts with.</span>
+    </div>
+
     {#if inTauri}
       <div class="card" class:exposed={app.storeStatus ? !app.storeStatus.bound_to_user : false}>
         <div class="card-head">
@@ -77,15 +91,6 @@
         {/if}
       </div>
     {/if}
-    <div class="field">
-      <span class="label">Appearance</span>
-      <div class="segmented" role="group" aria-label="Theme">
-        {#each themes as t}
-          <button aria-pressed={app.settings.theme === t} onclick={() => { app.settings.theme = t; void app.saveSettings(); }}>{t}</button>
-        {/each}
-      </div>
-    </div>
-
     <div class="card" class:exposed={app.push.status === "error" || app.push.permission === "denied"}>
       <div class="card-head">
         <span>Push

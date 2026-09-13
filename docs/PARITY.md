@@ -66,7 +66,8 @@ z cechą `hem`). Symulacja nie zastępuje testu na żywym HEM, ale trzyma ście�
 | Wynik: granted / denied / błąd | ✅ | plus expired, cancelled, paired, unpaired |
 | Archiwum | ✅ | jako zakładka History: dziennik wszystkiego, co telefon zrobił |
 | Ustawienia | ✅ | biometria, tło, motyw, push, broker, stan pieczęci; trzy karty diagnostyczne przeniesione do Historii |
-| O aplikacji | ✅ | numer buildu |
+| O aplikacji | ✅ | wersja, broker, protokół, magazyn, dane wydawcy i czego brakuje do sklepu |
+| Lista bibliotek open source | ✅ | **[v2]** 285 pozycji z wersją, licencją i właścicielem praw, zbierane z builda przez `scripts/licences.py`; osobny ekran z szukajką, tekstami licencji i „Copy all” do listingu |
 | Ukryta konsola (`consolelog`) | ✅ | zastąpiona rodziną Trace w Historii (Copy, Clear); karta Diagnostics zniknęła |
 | Brak sieci / awaria | ✅ | |
 | Shake-to-lock | ➖ | |

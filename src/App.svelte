@@ -13,6 +13,7 @@
   import History from "./screens/History.svelte";
   import Settings from "./screens/Settings.svelte";
   import About from "./screens/About.svelte";
+  import Licences from "./screens/Licences.svelte";
   import Problem from "./screens/Problem.svelte";
 
   const s = $derived(app.screen);
@@ -34,6 +35,7 @@
   {:else if s.name === "history"}<History pid={s.pid} />
   {:else if s.name === "settings"}<Settings />
   {:else if s.name === "about"}<About />
+  {:else if s.name === "licences"}<Licences />
   {:else if s.name === "problem"}<Problem message={s.message} code={s.code} />
   {/if}
 {/key}

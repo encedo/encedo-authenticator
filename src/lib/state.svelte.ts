@@ -16,6 +16,7 @@ export type Screen =
   | { name: "history"; pid?: string }
   | { name: "settings" }
   | { name: "about" }
+  | { name: "licences" }
   | { name: "problem"; message: string; code?: string };
 
 export type Tab = "home" | "modules" | "history" | "settings";
@@ -177,7 +178,7 @@ class AppState {
       case "modules": case "module": case "pairConfirm": return "modules";
       case "pair": return null;
       case "history": return "history";
-      case "settings": case "about": return "settings";
+      case "settings": case "about": case "licences": return "settings";
       default: return null;
     }
   }

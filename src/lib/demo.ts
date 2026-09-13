@@ -23,6 +23,7 @@ export function openDemo(d: string | null, theme?: string | null) {
     case "history": app.go({ name: "history" }); break;
     case "settings": app.go({ name: "settings" }); break;
     case "about": app.go({ name: "about" }); break;
+    case "licences": app.go({ name: "licences" }); break;
     case "granted": app.go({ name: "result", outcome: "granted", title: "Unlock a drive", detail: "disk0 · read-write · 1 h" }); break;
     case "denied": app.go({ name: "result", outcome: "denied", title: "Delete the log" }); break;
     case "expired": app.go({ name: "result", outcome: "expired", title: "Use the key" }); break;

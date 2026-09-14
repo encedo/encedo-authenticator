@@ -881,6 +881,7 @@ dependencies = [
  "tauri-plugin-biometric",
  "tauri-plugin-encedo-keystore",
  "tauri-plugin-encedo-push",
+ "tauri-plugin-encedo-update",
  "thiserror 2.0.20",
  "tokio",
  "zeroize",
@@ -3694,6 +3695,15 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-encedo-push"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
+name = "tauri-plugin-encedo-update"
 version = "0.1.0"
 dependencies = [
  "serde",

@@ -32,6 +32,22 @@ export interface AuditHealth { entries: number; pruned: number; broken_at: strin
 export interface AnswerView { outcome: Outcome; title: string; detail: string }
 export interface Settings { biometric_lock: boolean; lock_on_background: boolean; theme: "system" | "light" | "dark"; onboarded: boolean }
 export interface AppInfo { version: string; platform: string; broker: string }
+/** Whether this build may still be used, as Play sees it. */
+export type UpdateLevel = "none" | "recommended" | "critical";
+export interface UpdateStatus {
+  level: UpdateLevel;
+  /** The build Play offers, or the one this phone was told to reach. */
+  required_version: number;
+  current_version: number;
+  /** What the publisher set on the release in the Play Console, 0-5. */
+  priority: number;
+  stale_days: number;
+  /** Play can replace this build in place; false for a sideloaded APK. */
+  can_update_in_app: boolean;
+  checked_at: number;
+  note: string | null;
+}
+
 /** Whether the storage is open, and what protects its key on this phone. */
 export interface StoreStatus {
   open: boolean;
@@ -63,6 +79,10 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
 export const api = {
   available: inTauri,
   appInfo: () => call<AppInfo>("app_info"),
+  updateStatus: () => call<UpdateStatus>("update_status"),
+  updateStart: () => call<void>("update_start"),
+  /** Development builds only: pretend Play said something. */
+  updateSimulate: (level: UpdateLevel) => call<UpdateStatus>("update_simulate", { level }),
   storeStatus: () => call<StoreStatus>("store_status"),
   storeOpen: () => call<StoreStatus>("store_open"),
   storeReset: () => call<StoreStatus>("store_reset"),

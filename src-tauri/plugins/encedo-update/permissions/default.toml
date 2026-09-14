@@ -1,0 +1,5 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Ask Play whether a newer release is waiting and start the update. Only Rust calls these."
+permissions = ["allow-check", "allow-start", "allow-open-store"]

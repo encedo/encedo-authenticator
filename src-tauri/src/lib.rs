@@ -8,6 +8,7 @@ pub mod legacy;
 pub mod notify;
 pub mod scope;
 pub mod store;
+pub mod update;
 
 use std::path::PathBuf;
 
@@ -147,6 +148,8 @@ pub fn run() {
         .plugin(tauri_plugin_encedo_push::init())
         .plugin(tauri_plugin_encedo_keystore::init())
         .plugin(tauri_plugin_biometric::init());
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_encedo_update::init());
     builder
         .setup(|app| {
             let data_dir: PathBuf = app.path().app_data_dir().expect("app data dir");
@@ -176,6 +179,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::trace,
+            commands::update_status,
+            commands::update_start,
+            commands::update_simulate,
             commands::store_status,
             commands::store_open,
             commands::store_reset,

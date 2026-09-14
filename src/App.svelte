@@ -15,12 +15,16 @@
   import About from "./screens/About.svelte";
   import Licences from "./screens/Licences.svelte";
   import Problem from "./screens/Problem.svelte";
+  import MustUpdate from "./screens/MustUpdate.svelte";
 
   const s = $derived(app.screen);
 </script>
 
 {#if !app.ready}
   <div class="screen"><div class="screen-body centered"><p class="eyebrow muted">Opening</p></div></div>
+{:else if app.update?.level === "critical"}
+  <!-- Nothing else is reachable while a release nobody may skip is waiting. -->
+  <MustUpdate />
 {:else}
 {#key s}
   {#if s.name === "welcome"}<Welcome />
@@ -41,6 +45,6 @@
 {/key}
 {/if}
 
-{#if app.tab}
+{#if app.tab && app.update?.level !== "critical"}
   <Nav />
 {/if}

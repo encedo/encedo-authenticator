@@ -1,0 +1,14 @@
+[package]
+name = "tauri-plugin-encedo-update"
+version = "0.1.0"
+description = "Play In-App Updates for the Encedo HEM Authenticator: is there a newer release, how urgent is it, and the flow that installs it"
+edition = "2021"
+publish = false
+links = "tauri-plugin-encedo-update"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+tauri = { version = "2" }
+serde = { version = "1", features = ["derive"] }

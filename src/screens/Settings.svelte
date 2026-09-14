@@ -4,10 +4,18 @@
   import Masthead from "../lib/Masthead.svelte";
   import Switch from "../lib/Switch.svelte";
   import Help from "../lib/Help.svelte";
+  import { onMount } from "svelte";
+  import { api } from "../lib/api";
   import { copyText, inTauri } from "../lib/native";
 
   let copied = $state(false);
   let lockNote = $state<string | null>(null);
+  // The update screens cannot be reached without publishing a release, so a
+  // development build can pretend Play said something.
+  let isDev = $state(false);
+  onMount(async () => {
+    if (inTauri) isDev = (await api.appInfo().catch(() => null))?.version.includes("-dev.") ?? false;
+  });
 
   async function copyToken() {
     if (!app.push.token) return;
@@ -180,6 +188,18 @@
           <li><button class="rowbtn" onclick={() => app.go({ name: "problem", message: "api.encedo.com did not answer within 10 seconds. The request, if any, is still open on the module." })}><span class="main"><span class="name">Show a failure</span><span class="sub">broker unreachable</span></span></button></li>
           <li><button class="rowbtn" onclick={() => app.go({ name: "lock" })}><span class="main"><span class="name">Lock now</span></span></button></li>
         </ul>
+      </div>
+    {/if}
+
+    {#if isDev}
+      <div class="card">
+        <div class="card-head"><span>Update screens</span><span class="v">development build</span></div>
+        <div class="status-note">Pretend Play answered, to see what a person would be shown. Nothing is downloaded and nothing leaves this phone.</div>
+        <div class="segmented" role="group" aria-label="Pretend an update">
+          <button onclick={() => app.simulateUpdate("none")}>None</button>
+          <button onclick={() => app.simulateUpdate("recommended")}>Recommended</button>
+          <button onclick={() => app.simulateUpdate("critical")}>Blocking</button>
+        </div>
       </div>
     {/if}
 

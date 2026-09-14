@@ -6,6 +6,7 @@ use tauri::State;
 
 use crate::core::{AnswerView, Core, ErrorView, ModuleView, PairingPreview, RefreshReport, RequestView, StoreStatus};
 use crate::store::{AuditHealth, Family, LogEntry, Settings};
+use crate::update::UpdateStatus;
 
 type Res<T> = Result<T, ErrorView>;
 
@@ -116,6 +117,83 @@ pub fn log_app(core: State<'_, Core>, kind: String, title: String, summary: Stri
 #[tauri::command]
 pub fn log_flush(core: State<'_, Core>) -> Res<()> {
     map(core.flush())
+}
+
+/// Ask Play what it has and fold it into what this phone already knew. Answers
+/// on every platform; off Android, and for a build Play does not manage, the
+/// verdict is whatever the phone remembers.
+#[tauri::command]
+pub fn update_status(app: tauri::AppHandle, core: State<'_, Core>) -> UpdateStatus {
+    let _ = &app;
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_encedo_update::UpdatesExt;
+        return match app.updates().check() {
+            Ok(p) => {
+                let answer = crate::update::PlayAnswer {
+                    available: p.available,
+                    version_code: p.version_code,
+                    priority: p.priority,
+                    stale_days: p.stale_days,
+                    can_update_in_app: p.installed_from_play && p.immediate_allowed,
+                };
+                core.update_seen(&answer, p.current_version_code, p.error)
+            }
+            Err(e) => {
+                let mut status = core.update_known(0);
+                status.note = Some(e);
+                status
+            }
+        };
+    }
+    #[cfg(not(target_os = "android"))]
+    core.update_known(i64::MAX)
+}
+
+/// Hand the person to Play: its own full-screen update where that is possible,
+/// the store page where it is not.
+#[tauri::command]
+pub fn update_start(app: tauri::AppHandle, core: State<'_, Core>) -> Res<()> {
+    let _ = (&app, &core);
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_encedo_update::UpdatesExt;
+        let updates = app.updates();
+        return match updates.start() {
+            Ok(()) => {
+                let _ = core.update_started("Play's own update flow");
+                Ok(())
+            }
+            Err(flow) => match updates.open_store() {
+                Ok(()) => {
+                    let _ = core.update_started(&format!("the store page ({flow})"));
+                    Ok(())
+                }
+                Err(e) => Err(ErrorView { code: "update".into(), message: e }),
+            },
+        };
+    }
+    #[cfg(not(target_os = "android"))]
+    Err(ErrorView { code: "update".into(), message: "there is no update flow on this platform".into() })
+}
+
+/// Development builds only: pretend Play said something, to see the screens.
+#[tauri::command]
+pub fn update_simulate(app: tauri::AppHandle, core: State<'_, Core>, level: String) -> Res<UpdateStatus> {
+    if !app.package_info().version.to_string().contains("-dev.") {
+        return Err(ErrorView { code: "state".into(), message: "only a development build can pretend".into() });
+    }
+    let current = core.update_known(0).current_version;
+    let answer = match level.as_str() {
+        "critical" => crate::update::PlayAnswer { available: true, version_code: current + 1, priority: 5, stale_days: 0, can_update_in_app: false },
+        "recommended" => crate::update::PlayAnswer { available: true, version_code: current + 1, priority: 2, stale_days: 0, can_update_in_app: false },
+        _ => crate::update::PlayAnswer::default(),
+    };
+    let mut status = core.update_seen(&answer, current, Some("pretended in a development build".into()));
+    if level != "critical" && level != "recommended" {
+        status = core.update_known(i64::MAX);
+    }
+    Ok(status)
 }
 
 #[tauri::command]

@@ -49,6 +49,14 @@ Bez A1–A3 nie ma sensu robić buildów produkcyjnych; bez A4 nie ma iOS.
    dane pozostają na urządzeniu, wysyłany jest tylko podpisany werdykt i token push),
    polityka prywatności.
 4. Ścieżka: internal testing (właściciel + córka) → closed → produkcja.
+4a. **Wydanie po incydencie bezpieczeństwa.** Aplikacja ma blokadę starych wersji
+   (`plugins/encedo-update`, ekran „This version cannot be used”), ale wisi ona na
+   jednym polu przy publikacji: `inAppUpdatePriority` wydania. Zasada: 4 albo 5 dla
+   wydania, którego nikt nie może pominąć, 1–3 dla zwykłej poprawki, 0 gdy nie ma
+   po co zawracać głowy. To pole ustawia się przez Publishing API (`edits.tracks.update`),
+   nie widziałem go w konsoli — do sprawdzenia przy pierwszym wydaniu. **Opis, co było
+   nie tak, piszemy w notatkach wydania**, bo API Play nie przenosi żadnego tekstu,
+   a plansza w aplikacji odsyła właśnie tam.
 5. v2 to osobny pakiet, więc **nie widzi danych v1** (inny katalog aplikacji) i
    `legacy.rs` nic tam nie sprząta — v1 zostaje na telefonie, dopóki właściciel jej
    nie odinstaluje. W opisie w Play warto napisać wprost: zainstaluj v2, sparuj

@@ -32,6 +32,10 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 tokio = { version = "1", features = ["rt", "macros", "net", "io-util", "time"] }
 encedo-protocol = { version = "0.1.0", path = "crates/protocol", features = ["hem"] }
 
+# Play has no counterpart on iOS, so this one is Android's alone.
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-encedo-update = { path = "plugins/encedo-update" }
+
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-barcode-scanner = { path = "plugins/barcode-scanner" }
 tauri-plugin-encedo-push = { path = "plugins/encedo-push" }

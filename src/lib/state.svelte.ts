@@ -1,5 +1,5 @@
 import type { Settings } from "./api";
-import { api, ApiError, type AnswerView, type AuditHealth, type Family, type LogEntry, type ModuleView, type Outcome, type PairingPreview, type RefreshReport, type RequestView, type StoreStatus } from "./api";
+import { api, ApiError, type AnswerView, type AuditHealth, type Family, type LogEntry, type ModuleView, type Outcome, type PairingPreview, type RefreshReport, type RequestView, type StoreStatus, type UpdateStatus } from "./api";
 import { biometricAuth, inTauri, trace, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
 import * as mock from "./mock";
 
@@ -45,6 +45,8 @@ class AppState {
   health = $state<AuditHealth | null>(null);
   /** Whether the storage is open, and what protects its key. */
   storeStatus = $state<StoreStatus | null>(null);
+  /** Whether this build may still be used. */
+  update = $state<UpdateStatus | null>(null);
   online = $state(true);
   busy = $state(false);
   lastError = $state<string | null>(null);
@@ -98,6 +100,7 @@ class AppState {
     } finally {
       this.ready = true;
     }
+    void this.checkUpdate();
     this.push = await startPush({
       onToken: (token) => { this.push = { ...this.push, status: "registered", token }; void api.pushTokenChanged(token).catch(() => {}); },
       onMessage: (m) => {
@@ -111,6 +114,32 @@ class AppState {
     });
     if (this.push.token && this.storeStatus?.open) void api.pushTokenChanged(this.push.token).catch(() => {});
     if (this.storeStatus?.open && this.settings.onboarded && !this.settings.biometric_lock) void this.refresh();
+  }
+
+  /** What Play has to say about this build. Cheap, and the answer is folded
+   *  into what the phone already knew, so cutting the network changes nothing. */
+  async checkUpdate() {
+    if (!inTauri) return;
+    this.update = await api.updateStatus().catch(() => this.update);
+  }
+
+  /** Hand the person to Play. */
+  async startUpdate() {
+    if (!inTauri) return;
+    this.busy = true;
+    try {
+      await api.updateStart();
+    } catch (e) {
+      this.lastError = (e as ApiError).message ?? "Play could not be opened.";
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Development builds only: see the screens without publishing anything. */
+  async simulateUpdate(level: "none" | "recommended" | "critical") {
+    if (!inTauri) return;
+    this.update = await api.updateSimulate(level).catch(() => this.update);
   }
 
   /** Everything the screens read, once the storage is open. */
@@ -264,7 +293,10 @@ class AppState {
       }
       return;
     }
-    if (!this.unlocking) void this.logApp("app.foreground", "App came back", awayMs ? `away ${Math.round(awayMs / 1000)} s` : "");
+    if (!this.unlocking) {
+      void this.logApp("app.foreground", "App came back", awayMs ? `away ${Math.round(awayMs / 1000)} s` : "");
+      void this.checkUpdate();
+    }
     if (this.unlocking) return; // the biometric prompt itself pauses the activity
     const away = awayMs;
     const mustLock = this.settings.onboarded && this.settings.biometric_lock && this.settings.lock_on_background && away >= AppState.LOCK_AFTER_MS;

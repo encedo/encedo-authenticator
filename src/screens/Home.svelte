@@ -48,6 +48,17 @@
       </h1>
     </div>
 
+    {#if app.update?.level === "recommended"}
+      <div class="card">
+        <div class="card-head"><span>Update</span><span class="v">build {app.update.required_version}</span></div>
+        <div class="status-note">A newer version is in Play. Nothing is wrong with this one, but the next one is better.</div>
+        <div class="card-foot">
+          <span>this build: {app.update.current_version}</span>
+          <button class="button quiet small" disabled={app.busy} onclick={() => app.startUpdate()}>Update</button>
+        </div>
+      </div>
+    {/if}
+
     {#if app.modules.length && !n}
       <button class="button plain" disabled={app.busy} onclick={() => app.refresh()}>{app.busy ? "Asking the broker…" : "Check for requests"}</button>
     {/if}

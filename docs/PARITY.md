@@ -78,7 +78,8 @@ z cechą `hem`). Symulacja nie zastępuje testu na żywym HEM, ale trzyma ście�
 
 | Element | Stan | Uwagi |
 |---|---|---|
-| Build Android z Vostro, numerowane APK dev | ✅ | `scripts/vostro-dev-apk.sh` |
+| Build Android z Vostro, numerowane APK dev | ✅ | `scripts/vostro-dev-apk.sh`, wysyłka przez `scripts/sync-vostro.sh` |
+| Wymuszona aktualizacja po incydencie | ✅ 🧪 | **[v2]** Play In-App Updates: `inAppUpdatePriority` ≥ 4 blokuje starą wersję pełnoekranową planszą, 1–3 daje pasek na Now; werdykt zapamiętany, więc odcięcie sieci go nie omija. Na iOS brak odpowiednika — do zrobienia przez `itunes.apple.com/lookup` po publikacji |
 | Podpis kluczem upload, AAB do Play | ⬜ | wstrzymane: nowa firma RKV zamiast Encedo, nowe konto Google, nowy projekt Firebase i nowe klucze (patrz „Przeprowadzka na RKV”) |
 | iOS — na telefonie | ✅ | iPhone 15 Pro (iOS 26.6.1), podpis darmowym zespołem: parowanie, biometria, magazyn na Keychainie, skaner, odpytywanie brokera |
 | iOS — push (kod) | 🟡 | plugin z Firebase Messaging działa w aplikacji; token APNs nie powstanie bez uprawnienia `aps-environment`, którego darmowy zespół nie daje (sprawdzone: `codesign -d --entitlements` pokazuje tylko `application-identifier`, `team-identifier`, `get-task-allow`) |

@@ -403,6 +403,54 @@ impl Core {
         self.with_store(|s| s.save())
     }
 
+    // ---- updates -----------------------------------------------------------
+
+    /// What Play said, folded into what this phone already knew. Writes a line
+    /// in the journal when the verdict changes, and nothing when it does not.
+    pub fn update_seen(&self, play: &crate::update::PlayAnswer, current: i64, note: Option<String>) -> crate::update::UpdateStatus {
+        let path = self.update_path();
+        let (mut status, changed) = crate::update::settle(&path, play, current, now());
+        status.note = note;
+        if changed {
+            let level = match status.level {
+                crate::update::Level::Critical => Level::Bad,
+                _ => Level::Plain,
+            };
+            let title = match status.level {
+                crate::update::Level::Critical => "This version must not be used",
+                crate::update::Level::Recommended => "A newer version is waiting",
+                crate::update::Level::None => "Up to date again",
+            };
+            let _ = self.record(
+                Note::new("app.update", Family::App, level, title)
+                    .about(match status.level {
+                        crate::update::Level::None => "this phone runs a version nobody has objected to".to_string(),
+                        _ => format!("Play offers build {}, this phone runs {}", status.required_version, status.current_version),
+                    })
+                    .field("Priority", status.priority.to_string())
+                    .field("Behind by", if status.stale_days >= 0 { format!("{} day(s)", status.stale_days) } else { "not stated".into() })
+                    .field("Play can update it here", if status.can_update_in_app { "yes" } else { "no, this build did not come from Play" }),
+            );
+        }
+        status
+    }
+
+    /// The remembered verdict, for a launch that cannot reach Play at all.
+    pub fn update_known(&self, current: i64) -> crate::update::UpdateStatus {
+        let (mut status, _) = crate::update::settle(&self.update_path(), &crate::update::PlayAnswer::default(), current, now());
+        status.note = Some("Play could not be asked".into());
+        status
+    }
+
+    fn update_path(&self) -> PathBuf {
+        self.store_path.with_file_name("update.json")
+    }
+
+    /// The person is on their way to Play; say so in the journal.
+    pub fn update_started(&self, how: &str) -> Result<(), CoreError> {
+        self.record(Note::new("app.update_started", Family::App, Level::Plain, "Sent to Play to update").about(how.to_string()))
+    }
+
     /// The first things done with a newly opened store: sweep what the previous
     /// version left behind, and write the line that opens the session.
     pub fn opened(&self, version: &str) -> Result<(), CoreError> {

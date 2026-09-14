@@ -82,18 +82,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--sealed); ou
 .screen { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: var(--safe-top); }
 .screen-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 var(--pad) 24px; display: flex; flex-direction: column; gap: 22px; }
 .screen-body > * { flex-shrink: 0; }
-.screen-body.centered { justify-content: center; }
+/* `safe` matters: when the content is taller than the screen, plain centring
+   pushes its top out of the scroll box and clips it beyond reach. */
+.screen-body.centered { justify-content: safe center; padding-top: 24px; }
 .screen-actions { display: flex; flex-direction: column; gap: 10px; padding: 12px var(--pad) calc(12px + var(--safe-bottom)); border-top: 1px solid var(--rule); background: var(--ground); }
 .screen-actions.row { flex-direction: row; }
 .screen-actions.row > * { flex: 1; }
 .screen-actions.row > .exposed:first-child { flex: 0 0 38%; }
 
-.masthead { display: flex; align-items: center; gap: 10px; padding: 14px var(--pad) 0; font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); }
+.masthead { display: flex; align-items: center; gap: 10px; padding: 14px var(--pad) 12px; font-family: var(--mono); font-size: 12px; letter-spacing: .04em; color: var(--muted); }
 .masthead .mark { width: 26px; height: 26px; flex: none; border-radius: 50%; }
 .masthead b { color: var(--ink); font-weight: 500; letter-spacing: .02em; }
 .masthead .back { margin-left: auto; }
 
-.page-head { display: flex; flex-direction: column; gap: 8px; padding-top: 18px; }
+.page-head { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
 .page-head p { color: var(--ink-soft); }
 
 /* ---- controls -------------------------------------------------------- */

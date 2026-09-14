@@ -191,6 +191,22 @@ class AppState {
     }
   }
 
+  /** The lock can be on while the key is not bound to the person: a store made
+   *  before the lock was turned on, or one carried across an upgrade. Nothing
+   *  fixes that by itself, and the confirmation that just happened is exactly
+   *  what binding needs, so it is done here. */
+  private async bindKeyIfNeeded() {
+    if (!inTauri) return;
+    const s = this.storeStatus;
+    if (!s?.open || s.bound_to_user || !s.credential || !this.settings.biometric_lock) return;
+    try {
+      await api.settingsSet($state.snapshot(this.settings));
+      this.storeStatus = await api.storeStatus();
+    } catch {
+      // The next confirmation can try again; nothing is lost by not shouting.
+    }
+  }
+
   /** The key is gone: throw the unreadable store away and start over. */
   async resetStorage() {
     if (!inTauri) return;
@@ -342,6 +358,7 @@ class AppState {
       if (r.ok) {
         if (closed && !(await this.openStore())) return;
         void this.logApp("app.unlocked", "Unlocked", closed ? "storage opened with your confirmation" : "confirmed on this phone");
+        void this.bindKeyIfNeeded();
         this.leaveLock();
         return;
       }

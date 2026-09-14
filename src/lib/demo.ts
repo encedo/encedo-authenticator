@@ -25,10 +25,10 @@ export function openDemo(d: string | null, theme?: string | null) {
     case "about": app.go({ name: "about" }); break;
     case "licences": app.go({ name: "licences" }); break;
     case "must-update":
-      app.update = { level: "critical", required_version: 2000034, current_version: 2000033, priority: 5, stale_days: 2, can_update_in_app: true, checked_at: Math.floor(Date.now() / 1000), note: null };
+      app.update = { level: "critical", required_version: 2000034, current_version: 2000033, priority: 5, stale_days: 2, can_update_in_app: true, checked_at: Math.floor(Date.now() / 1000), note: null, pretended: true };
       break;
     case "update-soon":
-      app.update = { level: "recommended", required_version: 2000034, current_version: 2000033, priority: 2, stale_days: 3, can_update_in_app: true, checked_at: Math.floor(Date.now() / 1000), note: null };
+      app.update = { level: "recommended", required_version: 2000034, current_version: 2000033, priority: 2, stale_days: 3, can_update_in_app: true, checked_at: Math.floor(Date.now() / 1000), note: null, pretended: true };
       app.go({ name: "home" });
       break;
     case "granted": app.go({ name: "result", outcome: "granted", title: "Unlock a drive", detail: "disk0 · read-write · 1 h" }); break;

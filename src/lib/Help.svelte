@@ -3,15 +3,29 @@
   // bubble. Sections have their own, so the help sits next to what it explains.
   let { label = "What this means", parts }: { label?: string; parts: { term?: string; text: string }[] } = $props();
   let open = $state(false);
-  /** A question mark on the right half of the screen opens its bubble leftwards,
-   *  so it never hangs off the edge. */
-  let align = $state<"left" | "right">("left");
   let wrap: HTMLElement | undefined;
 
-  // Whichever way it was opened, the side is decided before it is drawn: a
-  // bubble hanging off the edge would also scroll the page sideways.
+  /** Screen padding, matching --pad; the bubble never comes closer than this. */
+  const EDGE = 20;
+  const WANTED = 290;
+
+  // The bubble belongs to the screen, not to the question mark: anchoring it to
+  // the button is what sent it off the left edge when the button sat on the
+  // right. So it is placed against the screen and the arrow moves instead.
+  let width = $state(WANTED);
+  let offset = $state(0);
+  let arrow = $state(8);
+
   $effect(() => {
-    if (open && wrap) align = wrap.getBoundingClientRect().left > window.innerWidth / 2 ? "right" : "left";
+    if (!open || !wrap) return;
+    const r = wrap.getBoundingClientRect();
+    const screen = window.innerWidth;
+    width = Math.min(WANTED, screen - 2 * EDGE);
+    const centre = r.left + r.width / 2;
+    const left = Math.max(EDGE, Math.min(centre - width / 2, screen - EDGE - width));
+    offset = left - r.left;
+    // Half the arrow is 5px; keep it inside the bubble's rounded corners.
+    arrow = Math.max(10, Math.min(centre - left - 5, width - 20));
   });
 
   function away(e: MouseEvent) {
@@ -24,7 +38,7 @@
 <span class="helpwrap" bind:this={wrap}>
   <button class="help" aria-expanded={open} aria-label={label} onclick={() => (open = !open)}>?</button>
   {#if open}
-    <span class="bubble" class:right={align === "right"} role="note">
+    <span class="bubble" role="note" style="left:{offset}px; width:{width}px; --arrow:{arrow}px">
       {#each parts as p}
         <span class="part">
           {#if p.term}<b>{p.term}</b>{/if}

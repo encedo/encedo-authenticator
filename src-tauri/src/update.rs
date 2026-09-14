@@ -61,6 +61,10 @@ pub struct UpdateStatus {
     pub checked_at: u64,
     /// Why Play could not be asked, when it could not.
     pub note: Option<String>,
+    /// This verdict was pretended in a development build. The blocking screen
+    /// hides every other screen, including the one with the button that started
+    /// the pretence, so it has to offer its own way out.
+    pub pretended: bool,
 }
 
 /// The verdict kept between launches, so cutting the network does not lift it.
@@ -73,6 +77,8 @@ pub struct Remembered {
     pub level: Level,
     #[serde(default)]
     pub since: u64,
+    #[serde(default)]
+    pub pretended: bool,
 }
 
 /// What Play's answer means for a phone running `current`.
@@ -106,7 +112,7 @@ pub fn forget(path: &Path) {
 /// Fold what Play said into what this phone already knew. Returns the status to
 /// show and whether the verdict changed, which is what earns a line in the
 /// journal.
-pub fn settle(path: &Path, play: &PlayAnswer, current: i64, now: u64) -> (UpdateStatus, bool) {
+pub fn settle(path: &Path, play: &PlayAnswer, current: i64, now: u64, pretending: bool) -> (UpdateStatus, bool) {
     let mut known = load(path);
     // Reached the version it was told to reach: nothing left to remember.
     if known.required_version > 0 && current >= known.required_version {
@@ -123,11 +129,14 @@ pub fn settle(path: &Path, play: &PlayAnswer, current: i64, now: u64) -> (Update
         _ => play.version_code.max(known.required_version),
     };
 
-    let changed = level != known.level || required_version > known.required_version;
+    // Once pretended, always pretended: a real check later must not take the way
+    // out away from a phone that is only playing.
+    let pretended = pretending || known.pretended;
+    let changed = level != known.level || required_version > known.required_version || pretended != known.pretended;
     if changed {
         match level {
             Level::None => forget(path),
-            _ => save(path, &Remembered { required_version, level, since: now }),
+            _ => save(path, &Remembered { required_version, level, since: now, pretended }),
         }
     }
 
@@ -140,6 +149,7 @@ pub fn settle(path: &Path, play: &PlayAnswer, current: i64, now: u64) -> (Update
         can_update_in_app: play.can_update_in_app,
         checked_at: now,
         note: None,
+        pretended,
     };
     (status, changed)
 }
@@ -196,33 +206,51 @@ mod tests {
     #[test]
     fn a_blocking_verdict_survives_the_network_being_cut() {
         let path = temp("offline");
-        let (status, changed) = settle(&path, &play(true, 20, 5, 0), 10, 1_000);
+        let (status, changed) = settle(&path, &play(true, 20, 5, 0), 10, 1_000, false);
         assert_eq!((status.level, status.required_version, changed), (Level::Critical, 20, true));
 
         // Play cannot be reached at all next time; the phone still knows.
-        let (status, changed) = settle(&path, &play(false, 0, 0, 0), 10, 2_000);
+        let (status, changed) = settle(&path, &play(false, 0, 0, 0), 10, 2_000, false);
         assert_eq!(status.level, Level::Critical);
         assert_eq!(status.required_version, 20);
         assert!(!changed, "nothing new to write down");
 
         // And it is lifted by the only thing that should lift it.
-        let (status, changed) = settle(&path, &play(false, 0, 0, 0), 20, 3_000);
+        let (status, changed) = settle(&path, &play(false, 0, 0, 0), 20, 3_000, false);
         assert_eq!((status.level, changed), (Level::None, false));
         assert!(!path.exists(), "the phone stops carrying a verdict it has satisfied");
     }
 
     #[test]
+    fn a_pretended_verdict_stays_marked_as_one() {
+        let path = temp("pretend");
+        let (status, _) = settle(&path, &play(true, 20, 5, 0), 10, 1_000, true);
+        assert!(status.pretended, "the screen has to know it may offer a way out");
+
+        // A real check later must not quietly take that way out away.
+        let (status, _) = settle(&path, &play(true, 21, 5, 0), 10, 2_000, false);
+        assert!(status.pretended);
+        assert!(load(&path).pretended);
+
+        // Leaving the pretence is the same thing as satisfying the verdict.
+        forget(&path);
+        let (status, _) = settle(&path, &play(false, 0, 0, 0), 10, 3_000, false);
+        assert_eq!((status.level, status.pretended), (Level::None, false));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
     fn a_verdict_rises_but_never_falls_on_its_own() {
         let path = temp("rising");
-        settle(&path, &play(true, 20, 2, 0), 10, 1_000);
+        settle(&path, &play(true, 20, 2, 0), 10, 1_000, false);
         assert_eq!(load(&path).level, Level::Recommended);
 
         // The same release turns out to be urgent after all.
-        let (status, changed) = settle(&path, &play(true, 20, 5, 0), 10, 2_000);
+        let (status, changed) = settle(&path, &play(true, 20, 5, 0), 10, 2_000, false);
         assert_eq!((status.level, changed), (Level::Critical, true));
 
         // A later routine release must not quietly undo that.
-        let (status, _) = settle(&path, &play(true, 21, 0, 0), 10, 3_000);
+        let (status, _) = settle(&path, &play(true, 21, 0, 0), 10, 3_000, false);
         assert_eq!(status.level, Level::Critical);
         assert_eq!(status.required_version, 21, "and it names the newest version that fixes it");
         let _ = std::fs::remove_file(&path);

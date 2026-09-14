@@ -137,7 +137,7 @@ pub fn update_status(app: tauri::AppHandle, core: State<'_, Core>) -> UpdateStat
                     stale_days: p.stale_days,
                     can_update_in_app: p.installed_from_play && p.immediate_allowed,
                 };
-                core.update_seen(&answer, p.current_version_code, p.error)
+                core.update_seen(&answer, p.current_version_code, p.error, false)
             }
             Err(e) => {
                 let mut status = core.update_known(0);
@@ -204,7 +204,7 @@ pub fn update_simulate(app: tauri::AppHandle, core: State<'_, Core>, level: Stri
         "critical" => crate::update::PlayAnswer { available: true, version_code: current + 1, priority: 5, stale_days: 2, can_update_in_app: false },
         _ => crate::update::PlayAnswer { available: true, version_code: current + 1, priority: 2, stale_days: 3, can_update_in_app: false },
     };
-    Ok(core.update_seen(&answer, current, Some("pretended in a development build".into())))
+    Ok(core.update_seen(&answer, current, Some("pretended in a development build".into()), true))
 }
 
 #[tauri::command]

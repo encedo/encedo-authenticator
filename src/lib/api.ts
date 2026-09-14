@@ -46,6 +46,8 @@ export interface UpdateStatus {
   can_update_in_app: boolean;
   checked_at: number;
   note: string | null;
+  /** Pretended in a development build; the blocking screen then offers a way out. */
+  pretended: boolean;
 }
 
 /** Whether the storage is open, and what protects its key on this phone. */

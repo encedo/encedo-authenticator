@@ -407,9 +407,9 @@ impl Core {
 
     /// What Play said, folded into what this phone already knew. Writes a line
     /// in the journal when the verdict changes, and nothing when it does not.
-    pub fn update_seen(&self, play: &crate::update::PlayAnswer, current: i64, note: Option<String>) -> crate::update::UpdateStatus {
+    pub fn update_seen(&self, play: &crate::update::PlayAnswer, current: i64, note: Option<String>, pretending: bool) -> crate::update::UpdateStatus {
         let path = self.update_path();
-        let (mut status, changed) = crate::update::settle(&path, play, current, now());
+        let (mut status, changed) = crate::update::settle(&path, play, current, now(), pretending);
         status.note = note;
         if changed {
             let level = match status.level {
@@ -437,7 +437,7 @@ impl Core {
 
     /// The remembered verdict, for a launch that cannot reach Play at all.
     pub fn update_known(&self, current: i64) -> crate::update::UpdateStatus {
-        let (mut status, _) = crate::update::settle(&self.update_path(), &crate::update::PlayAnswer::default(), current, now());
+        let (mut status, _) = crate::update::settle(&self.update_path(), &crate::update::PlayAnswer::default(), current, now(), false);
         status.note = Some("Play could not be asked".into());
         status
     }

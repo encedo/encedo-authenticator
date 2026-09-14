@@ -5,6 +5,9 @@
 
   const u = $derived(app.update);
   const inPlace = $derived(u?.can_update_in_app ?? false);
+  // The blocking screen covers Settings, including the button that started a
+  // pretence, so a development build gets its way back here.
+  const pretended = $derived(u?.pretended ?? false);
 </script>
 
 <div class="screen">
@@ -49,5 +52,8 @@
       <p class="note risk">{app.lastError}</p>
     {/if}
     <button class="button plain" onclick={() => app.checkUpdate()}>Check again</button>
+    {#if pretended}
+      <button class="button plain" onclick={() => app.simulateUpdate("none")}>Leave the pretence (development build)</button>
+    {/if}
   </div>
 </div>

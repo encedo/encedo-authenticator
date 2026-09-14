@@ -258,21 +258,21 @@ img.mark { border-radius: 50%; display: block; }
 .help:focus-visible { outline: 2px solid var(--sealed); outline-offset: 2px; }
 .card-head .help { width: 20px; height: 20px; font-size: 11px; }
 .bubble {
-  position: absolute; z-index: 20; top: 30px; left: -2px; width: 290px;
-  max-width: calc(100vw - 2 * var(--pad));
+  /* `left` and `width` come from the component, which measures the screen: the
+     bubble is placed against the screen's edges and the arrow moves to stay
+     under the question mark. */
+  position: absolute; z-index: 20; top: 30px;
   background: var(--surface); border: 1px solid var(--rule-firm); border-radius: 6px;
   box-shadow: var(--shadow-lg); padding: 14px 15px; display: flex; flex-direction: column;
   gap: 10px; font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); text-align: left;
   font-weight: 400; letter-spacing: normal; text-transform: none;
+  max-height: 62vh; overflow-y: auto; overscroll-behavior: contain;
 }
 .bubble::before {
-  content: ""; position: absolute; top: -6px; left: 8px; width: 10px; height: 10px;
+  content: ""; position: absolute; top: -6px; left: var(--arrow, 8px); width: 10px; height: 10px;
   background: var(--surface); border-left: 1px solid var(--rule-firm);
   border-top: 1px solid var(--rule-firm); transform: rotate(45deg);
 }
-/* Anchored right when the question mark sits at the end of a row. */
-.bubble.right { left: auto; right: -2px; }
-.bubble.right::before { left: auto; right: 8px; }
 .bubble .part { display: flex; flex-direction: column; gap: 3px; }
 .bubble b { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 400; }
 

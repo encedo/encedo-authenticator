@@ -47,6 +47,8 @@ class AppState {
   storeStatus = $state<StoreStatus | null>(null);
   /** Whether this build may still be used. */
   update = $state<UpdateStatus | null>(null);
+  /** "Later" on the update screen: this launch carries on with this build. */
+  updateDeferred = $state(false);
   online = $state(true);
   busy = $state(false);
   lastError = $state<string | null>(null);
@@ -116,6 +118,17 @@ class AppState {
     if (this.storeStatus?.open && this.settings.onboarded && !this.settings.biometric_lock) void this.refresh();
   }
 
+  /** Whether an update screen is in front of everything else. */
+  get updateShowing(): boolean {
+    if (this.update?.level === "critical") return true;
+    return this.update?.level === "recommended" && !this.updateDeferred && this.screen.name !== "welcome";
+  }
+
+  /** Carry on with this build; the screen returns at the next launch. */
+  deferUpdate() {
+    this.updateDeferred = true;
+  }
+
   /** What Play has to say about this build. Cheap, and the answer is folded
    *  into what the phone already knew, so cutting the network changes nothing. */
   async checkUpdate() {
@@ -139,10 +152,9 @@ class AppState {
   /** Development builds only: see the screens without publishing anything. */
   async simulateUpdate(level: "none" | "recommended" | "critical") {
     if (!inTauri) return;
+    // Both verdicts take over the screen, so a new pretence starts undeferred.
+    this.updateDeferred = false;
     this.update = await api.updateSimulate(level).catch(() => this.update);
-    // A blocking verdict takes over every screen by itself; a recommended one is
-    // a line on Now, so go there or it looks like nothing happened.
-    if (this.update?.level === "recommended") this.go({ name: "home" });
   }
 
   /** Everything the screens read, once the storage is open. */

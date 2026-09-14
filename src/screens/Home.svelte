@@ -50,8 +50,8 @@
 
     {#if app.update?.level === "recommended"}
       <div class="card">
-        <div class="card-head"><span>Update</span><span class="v">build {app.update.required_version}</span></div>
-        <div class="status-note">A newer version is in Play. Nothing is wrong with this one, but the next one is better.</div>
+        <div class="card-head"><span>Update waiting</span><span class="v">build {app.update.required_version}</span></div>
+        <div class="status-note">A newer version is in Play. Nothing is wrong with this one; the release notes say what changed.</div>
         <div class="card-foot">
           <span>this build: {app.update.current_version}</span>
           <button class="button quiet small" disabled={app.busy} onclick={() => app.startUpdate()}>Update</button>

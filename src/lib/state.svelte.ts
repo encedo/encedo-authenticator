@@ -140,6 +140,9 @@ class AppState {
   async simulateUpdate(level: "none" | "recommended" | "critical") {
     if (!inTauri) return;
     this.update = await api.updateSimulate(level).catch(() => this.update);
+    // A blocking verdict takes over every screen by itself; a recommended one is
+    // a line on Now, so go there or it looks like nothing happened.
+    if (this.update?.level === "recommended") this.go({ name: "home" });
   }
 
   /** Everything the screens read, once the storage is open. */

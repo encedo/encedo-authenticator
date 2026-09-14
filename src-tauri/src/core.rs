@@ -442,6 +442,12 @@ impl Core {
         status
     }
 
+    /// Drop the remembered verdict. Only the development simulation uses this:
+    /// in the field a verdict is lifted by installing the version it names.
+    pub fn update_forget(&self) {
+        crate::update::forget(&self.update_path());
+    }
+
     fn update_path(&self) -> PathBuf {
         self.store_path.with_file_name("update.json")
     }

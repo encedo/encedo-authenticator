@@ -183,17 +183,28 @@ pub fn update_simulate(app: tauri::AppHandle, core: State<'_, Core>, level: Stri
     if !app.package_info().version.to_string().contains("-dev.") {
         return Err(ErrorView { code: "state".into(), message: "only a development build can pretend".into() });
     }
-    let current = core.update_known(0).current_version;
-    let answer = match level.as_str() {
-        "critical" => crate::update::PlayAnswer { available: true, version_code: current + 1, priority: 5, stale_days: 0, can_update_in_app: false },
-        "recommended" => crate::update::PlayAnswer { available: true, version_code: current + 1, priority: 2, stale_days: 0, can_update_in_app: false },
-        _ => crate::update::PlayAnswer::default(),
+    // The real build number, so the screens read like the real thing rather than
+    // "this build 0, needed 1".
+    #[cfg(target_os = "android")]
+    let current = {
+        use tauri_plugin_encedo_update::UpdatesExt;
+        app.updates().check().map(|p| p.current_version_code).unwrap_or(0)
     };
-    let mut status = core.update_seen(&answer, current, Some("pretended in a development build".into()));
+    #[cfg(not(target_os = "android"))]
+    let current = 0;
+
+    // A pretence starts from nothing: without this, a blocking verdict from the
+    // last press would outrank whatever is being asked for now — correct in the
+    // field, useless for looking at screens.
+    core.update_forget();
     if level != "critical" && level != "recommended" {
-        status = core.update_known(i64::MAX);
+        return Ok(core.update_known(i64::MAX));
     }
-    Ok(status)
+    let answer = match level.as_str() {
+        "critical" => crate::update::PlayAnswer { available: true, version_code: current + 1, priority: 5, stale_days: 2, can_update_in_app: false },
+        _ => crate::update::PlayAnswer { available: true, version_code: current + 1, priority: 2, stale_days: 3, can_update_in_app: false },
+    };
+    Ok(core.update_seen(&answer, current, Some("pretended in a development build".into())))
 }
 
 #[tauri::command]

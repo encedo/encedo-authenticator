@@ -194,7 +194,7 @@
     {#if isDev}
       <div class="card">
         <div class="card-head"><span>Update screens</span><span class="v">development build</span></div>
-        <div class="status-note">Pretend Play answered, to see what a person would be shown. Nothing is downloaded and nothing leaves this phone.</div>
+        <div class="status-note">Pretend Play answered, to see what a person would be shown. Blocking takes over every screen; recommended is a line on Now, so this jumps there. Nothing is downloaded and nothing leaves this phone.</div>
         <div class="segmented" role="group" aria-label="Pretend an update">
           <button onclick={() => app.simulateUpdate("none")}>None</button>
           <button onclick={() => app.simulateUpdate("recommended")}>Recommended</button>

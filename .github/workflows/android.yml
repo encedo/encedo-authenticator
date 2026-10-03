@@ -1,31 +1,41 @@
-# Android build for Google Play, run on every push to main and by hand.
+# Android builds, on every push to main and by hand. Same recipe as encedo-chat.
 #
-# What comes out: a release AAB (for Play) and a release APK (to sideload),
-# both for arm64 + armv7, with a SHA256SUMS file, as one workflow artifact.
+# Two jobs after the tests, two artifacts, never mixed in one zip:
 #
-# Two ways to sign the Play build, chosen by which secrets exist:
-#   - no UPLOAD_KEYSTORE_B64 secret: the outputs are UNSIGNED. Download them,
-#     check the sums, sign offline with the upload key (jarsigner for the AAB,
-#     apksigner for the APK) and upload to Play. Play App Signing then re-signs
-#     with the app signing key it holds.
-#   - UPLOAD_KEYSTORE_B64 + UPLOAD_KEYSTORE_PASSWORD + UPLOAD_KEY_ALIAS +
-#     UPLOAD_KEY_PASSWORD set: Gradle signs here with the upload key, exactly as
-#     scripts/vostro-release-aab.sh does.
+#   sideload  an APK a phone will install: the .dev build (package
+#             com.encedo.mobile.auth.android.dev, name "Encedo HEM Auth dev"),
+#             exactly what scripts/vostro-dev-apk.sh produces, SIGNED here with
+#             the developer key from secrets. The signing key is the identity of
+#             every sideloaded install: a build signed with a different key will
+#             not update over the installed one. Use the same key vostro signs
+#             with (~/.android/debug.keystore) and both sources stay one app.
+#               ANDROID_KEYSTORE_B64       base64 -w0 of the .jks
+#               ANDROID_KEYSTORE_PASSWORD  store password
+#               ANDROID_KEY_ALIAS          alias inside it
+#               ANDROID_KEY_PASSWORD       only if it differs from the store's
+#             Missing secrets FAIL the job: an unsigned APK cannot be installed,
+#             so there is nothing useful to upload without them.
+#             A manual run with the "pre-release" box ticked also publishes this
+#             APK as a GitHub pre-release, so a tester without an account can
+#             download it.
 #
-# Pre-release for testers (manual run with `prerelease` ticked): the same code
-# as the .dev build from scripts/vostro-dev-apk.sh — package
-# com.encedo.mobile.auth.android.dev, so it installs next to v1 and never
-# collides with the Play version — signed with the TEST key (secrets
-# TEST_KEYSTORE_B64 + TEST_KEYSTORE_PASSWORD, alias encedo-test; nothing to do
-# with the upload key) and published as a GitHub pre-release anyone can
-# download. An unsigned APK cannot be installed, hence the test key.
+#   play      the release AAB for the Play Console, package ...android.v2.
+#             UNSIGNED unless the upload-key secrets exist (UPLOAD_KEYSTORE_B64,
+#             UPLOAD_KEYSTORE_PASSWORD, UPLOAD_KEY_ALIAS, UPLOAD_KEY_PASSWORD);
+#             without them sign offline with jarsigner, then upload. Play App
+#             Signing re-signs with the key it holds either way.
 #
-# Push needs GOOGLE_SERVICES_JSON (the raw google-services.json for the Firebase
-# project); without it the app still builds, but cannot register for push.
+# Push needs GOOGLE_SERVICES_JSON (the raw google-services.json of the Firebase
+# project; the same file vostro's firebase.xml was made from). Without it the
+# app builds and the job says so, but cannot register for push.
 #
-# versionCode comes from tauri.conf.json (2.0.0 -> 2000000) unless the manual
-# run sets one; Play refuses an upload that does not raise it. Pre-releases use
-# 2100000 + run number, above the vostro dev counter.
+# versionCode: the Play build takes it from tauri.conf.json (2.0.0 -> 2000000)
+# or from the manual input; the sideload build uses 2100000 + run number, above
+# the vostro dev counter (2000000 + n), so an Actions build updates over a
+# vostro build, not the other way round.
+#
+# gen/android/buildSrc hard-codes `cargo tauri android android-studio-script`
+# (the project was initialised with cargo tauri), hence tauri-cli for cargo.
 
 name: Android
 
@@ -38,23 +48,23 @@ on:
   workflow_dispatch:
     inputs:
       prerelease:
-        description: "Tester build: .dev package, test key, published as a GitHub pre-release"
+        description: "Also publish the sideload APK as a GitHub pre-release"
         required: false
         type: boolean
         default: false
       version_code:
-        description: "Android versionCode (empty = derived from tauri.conf.json; ignored for a pre-release)"
+        description: "Play build versionCode (empty = derived from tauri.conf.json)"
         required: false
         type: string
 
 concurrency:
-  group: android-${{ github.ref }}-${{ inputs.prerelease == true && 'prerelease' || 'release' }}
+  group: android-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
-  NDK_VERSION: 27.0.12077973
-  BUILD_TOOLS: 35.0.0
+  TAURI_CLI_VERSION: 2.11.4
+  SDK_PACKAGES: platforms;android-36 build-tools;35.0.0 ndk;27.0.12077973
 
 jobs:
   test:
@@ -62,9 +72,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -96,44 +106,50 @@ jobs:
       - name: App core
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-  android:
-    name: ${{ inputs.prerelease == true && 'Tester APK (pre-release)' || 'AAB + APK' }}
+  sideload:
+    name: Sideload APK (.dev, signed)
     runs-on: ubuntu-24.04
     needs: test
     timeout-minutes: 90
     permissions:
       contents: write   # the pre-release and its tag
     env:
-      # Secrets cannot be read in `if:`; they can in env, so the choices are made here.
       PRERELEASE: ${{ inputs.prerelease == true }}
-      HAS_KEYSTORE: ${{ secrets.UPLOAD_KEYSTORE_B64 != '' && inputs.prerelease != true }}
-      HAS_TEST_KEY: ${{ secrets.TEST_KEYSTORE_B64 != '' }}
       HAS_FIREBASE: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+      HAS_SIGNING_KEY: ${{ secrets.ANDROID_KEYSTORE_B64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_ALIAS != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: A pre-release needs the test key
-        if: env.PRERELEASE == 'true' && env.HAS_TEST_KEY != 'true'
+      # Said plainly and early, because the alternative is twenty minutes of
+      # Rust followed by an error nobody can read.
+      - name: Which secrets this run can see
         run: |
-          echo "::error::Set the TEST_KEYSTORE_B64 and TEST_KEYSTORE_PASSWORD secrets: an unsigned APK cannot be installed."
-          exit 1
+          echo "GOOGLE_SERVICES_JSON: $([ "$HAS_FIREBASE" = true ] && echo set || echo MISSING)"
+          echo "ANDROID_KEYSTORE_B64 + ANDROID_KEYSTORE_PASSWORD + ANDROID_KEY_ALIAS: $([ "$HAS_SIGNING_KEY" = true ] && echo set || echo MISSING)"
+          if [ "$HAS_SIGNING_KEY" != true ]; then
+            echo "::error::No signing key. Set ANDROID_KEYSTORE_B64 (base64 -w0 of the .jks), ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS as repository secrets (Settings > Secrets and variables > Actions > Repository secrets), plus ANDROID_KEY_PASSWORD if the key password differs. An unsigned APK cannot be installed."
+            exit 1
+          fi
+          if [ "$HAS_FIREBASE" != true ]; then
+            echo "::warning::GOOGLE_SERVICES_JSON is not visible to this run. The app builds, but will not get a push token. Check it is a Repository secret with exactly that name."
+          fi
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
       - uses: android-actions/setup-android@v3
         with:
-          packages: platforms;android-36 build-tools;35.0.0 ndk;27.0.12077973
+          packages: ${{ env.SDK_PACKAGES }}
           accept-android-sdk-licenses: true
 
       - name: Point Tauri at the NDK
-        run: echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+        run: echo "NDK_HOME=$(ls -d "$ANDROID_HOME"/ndk/* | head -1)" >> "$GITHUB_ENV"
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -149,12 +165,10 @@ jobs:
           workspaces: src-tauri
           key: android
 
-      # gen/android/buildSrc hard-codes `cargo tauri android android-studio-script`
-      # (the project was initialised with cargo tauri), so the npm CLI alone is not enough.
       - uses: cargo-bins/cargo-binstall@main
-      - name: Tauri CLI for cargo, same version as @tauri-apps/cli in package-lock.json
+      - name: Tauri CLI for cargo, the version @tauri-apps/cli has in package-lock.json
         run: |
-          cargo binstall -y tauri-cli@2.11.4
+          cargo binstall -y "tauri-cli@$TAURI_CLI_VERSION"
           cargo tauri --version
 
       - name: Firebase resources
@@ -165,46 +179,10 @@ jobs:
           printf '%s' "$GOOGLE_SERVICES_JSON" > "$RUNNER_TEMP/google-services.json"
           python3 scripts/firebase-res.py "$RUNNER_TEMP/google-services.json"
 
-      - name: No Firebase config
-        if: env.HAS_FIREBASE != 'true'
-        run: echo "::warning::GOOGLE_SERVICES_JSON is not set. The app builds, but will not get a push token."
-
-      - name: Upload key for Gradle signing
-        if: env.HAS_KEYSTORE == 'true'
-        env:
-          UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
-          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
-          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
-          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
-        run: |
-          printf '%s' "$UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
-          umask 077
-          cat > src-tauri/gen/android/keystore.properties <<EOF
-          storeFile=$RUNNER_TEMP/upload.jks
-          storePassword=$UPLOAD_KEYSTORE_PASSWORD
-          keyAlias=$UPLOAD_KEY_ALIAS
-          keyPassword=$UPLOAD_KEY_PASSWORD
-          EOF
-
-      - name: versionCode override
-        if: env.PRERELEASE != 'true' && inputs.version_code != ''
-        env:
-          VERSION_CODE: ${{ inputs.version_code }}
-        run: |
-          python3 - <<'EOF'
-          import json, os, pathlib
-          p = pathlib.Path("src-tauri/tauri.android.conf.json")
-          d = json.loads(p.read_text())
-          d.setdefault("bundle", {}).setdefault("android", {})["versionCode"] = int(os.environ["VERSION_CODE"])
-          p.write_text(json.dumps(d, indent=2) + "\n")
-          print(p.read_text())
-          EOF
-
       # Mirrors scripts/vostro-dev-apk.sh: the identifier stays the production one
-      # (Tauri finds the Kotlin sources by it), the .dev applicationId and name
-      # come from Gradle and strings.xml.
-      - name: Dev flavour for testers
-        if: env.PRERELEASE == 'true'
+      # (Tauri finds the Kotlin sources by it); the .dev applicationId and the
+      # name come from Gradle and strings.xml.
+      - name: Dev flavour
         run: |
           python3 - <<'EOF'
           import json, os, pathlib
@@ -222,55 +200,56 @@ jobs:
           EOF
           sed -i 's/applicationId = "com.encedo.mobile.auth.android.v2"/applicationId = "com.encedo.mobile.auth.android.dev"/' src-tauri/gen/android/app/build.gradle.kts
           sed -i 's/<string name="app_name">[^<]*<\/string>/<string name="app_name">Encedo HEM Auth dev<\/string>/; s/<string name="main_activity_title">[^<]*<\/string>/<string name="main_activity_title">Encedo HEM Auth dev<\/string>/' src-tauri/gen/android/app/src/main/res/values/strings.xml
-          grep -n applicationId src-tauri/gen/android/app/build.gradle.kts
+          grep -q 'applicationId = "com.encedo.mobile.auth.android.dev"' src-tauri/gen/android/app/build.gradle.kts || { echo "::error::applicationId patch did not take"; exit 1; }
 
       - name: Build
-        run: |
-          if [ "$PRERELEASE" = "true" ]; then kinds="--apk"; else kinds="--aab --apk"; fi
-          cargo tauri android build $kinds --target aarch64 --target armv7
+        run: cargo tauri android build --apk --target aarch64 --target armv7
 
-      - name: Sign the tester APK with the test key
-        if: env.PRERELEASE == 'true'
+      - name: What was produced
+        if: always()
+        run: find src-tauri/gen/android -name '*.apk' | sort
+
+      # zipalign first (the installer memory-maps the package), then apksigner
+      # (v2/v3 signatures; jarsigner writes v1 only and Android 11+ refuses that).
+      - name: Sign the APK with the developer key
         env:
-          TEST_KEYSTORE_B64: ${{ secrets.TEST_KEYSTORE_B64 }}
-          TEST_KEYSTORE_PASSWORD: ${{ secrets.TEST_KEYSTORE_PASSWORD }}
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          printf '%s' "$TEST_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/test.jks"
-          BT="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
-          OUT=src-tauri/gen/android/app/build/outputs/apk/universal/release
+          set -euo pipefail
+          APK=$(find src-tauri/gen/android -name '*unsigned*.apk' | head -1 || true)
+          test -n "$APK" || { echo "::error::the build produced no unsigned APK to sign"; exit 1; }
+          printf '%s' "$KS_B64" | base64 -d > "$RUNNER_TEMP/signing.jks"
+          KPASS="${KEY_PASS:-$KS_PASS}"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1 || true)
+          test -x "$BT/apksigner" || { echo "::error::no build-tools with apksigner under $ANDROID_HOME"; exit 1; }
           mkdir -p out
-          "$BT/zipalign" -p -f 4 "$OUT"/app-universal-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
-          "$BT/apksigner" sign --ks "$RUNNER_TEMP/test.jks" --ks-key-alias encedo-test \
-            --ks-pass env:TEST_KEYSTORE_PASSWORD --key-pass env:TEST_KEYSTORE_PASSWORD \
-            --out "out/encedo-auth-dev-$DEV_VERSION.apk" "$RUNNER_TEMP/aligned.apk"
-          "$BT/apksigner" verify --print-certs "out/encedo-auth-dev-$DEV_VERSION.apk" | grep -E 'Verifies|SHA-256'
-          "$BT/aapt" dump badging "out/encedo-auth-dev-$DEV_VERSION.apk" | grep -E "^package|native-code"
-          rm -f "$RUNNER_TEMP/test.jks"
-
-      - name: Collect outputs and sums
-        run: |
-          mkdir -p out
-          if [ "$PRERELEASE" != "true" ]; then
-            cp src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab out/
-            cp src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk out/
-          fi
-          (cd out && sha256sum -- *.apk *.aab 2>/dev/null > SHA256SUMS; cat SHA256SUMS)
+          OUT="out/encedo-auth-dev-$DEV_VERSION-${GITHUB_SHA:0:8}.apk"
+          "$BT/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/signing.jks" --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KS_PASS --key-pass env:KPASS \
+            --out "$OUT" "$RUNNER_TEMP/aligned.apk"
+          rm -f "$RUNNER_TEMP/signing.jks"
+          "$BT/apksigner" verify --print-certs "$OUT" | grep -E 'Verifies|SHA-256'
+          "$BT/aapt" dump badging "$OUT" | grep -E "^package|native-code"
+          (cd out && sha256sum -- *.apk > SHA256SUMS && cat SHA256SUMS)
+          echo "APK_OUT=$OUT" >> "$GITHUB_ENV"
           {
-            echo "### Android outputs"
+            echo "### Sideload APK"
             echo
-            if [ "$PRERELEASE" = "true" ]; then echo "Tester build \`$DEV_VERSION\`, package \`com.encedo.mobile.auth.android.dev\`, signed with the test key."
-            elif [ "$HAS_KEYSTORE" = "true" ]; then echo "Signed with the upload key."
-            else echo "**Unsigned.** Sign offline before uploading to Play."; fi
+            echo "\`$DEV_VERSION\`, package \`com.encedo.mobile.auth.android.dev\`, signed with the developer key."
+            echo "Push: $([ "$HAS_FIREBASE" = true ] && echo yes || echo "**no, GOOGLE_SERVICES_JSON missing**")"
             echo
-            echo '```'
-            cat out/SHA256SUMS
-            echo '```'
+            echo '```'; cat out/SHA256SUMS; echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The APK alone: one file to download and tap, nothing to choose between.
       - uses: actions/upload-artifact@v4
         with:
-          name: android-${{ github.run_number }}-${{ env.PRERELEASE == 'true' && 'tester' || (env.HAS_KEYSTORE == 'true' && 'signed' || 'unsigned') }}
-          path: out/
+          name: android-sideload-${{ env.DEV_VERSION }}-${{ github.sha }}
+          path: ${{ env.APK_OUT }}
           if-no-files-found: error
           retention-days: 30
 
@@ -279,20 +258,142 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$DEV_TAG" out/*.apk out/SHA256SUMS \
+          gh release create "$DEV_TAG" "$APK_OUT" out/SHA256SUMS \
             --target "$GITHUB_SHA" --prerelease \
             --title "Tester build $DEV_VERSION" \
             --notes "$(cat <<EOF
           Test build for sideloading, not the Play release.
 
           - Package \`com.encedo.mobile.auth.android.dev\`: installs next to v1 and next to the Play version.
-          - Signed with the test key, so each tester build updates the previous one. Enable "install unknown apps" for your browser or file manager.
+          - Signed with the developer key, so each tester build updates the previous one. Enable "install unknown apps" for your browser or file manager.
           - Check the download against \`SHA256SUMS\`.
           - Built from ${GITHUB_SHA} by run #${GITHUB_RUN_NUMBER}.
           EOF
           )"
           echo "Pre-release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$DEV_TAG" | tee -a "$GITHUB_STEP_SUMMARY"
 
+  play:
+    name: Play AAB (.v2)
+    runs-on: ubuntu-24.04
+    needs: test
+    timeout-minutes: 90
+    env:
+      HAS_FIREBASE: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
+      HAS_UPLOAD_KEY: ${{ secrets.UPLOAD_KEYSTORE_B64 != '' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Which secrets this run can see
+        run: |
+          echo "GOOGLE_SERVICES_JSON: $([ "$HAS_FIREBASE" = true ] && echo set || echo MISSING)"
+          echo "UPLOAD_KEYSTORE_B64: $([ "$HAS_UPLOAD_KEY" = true ] && echo "set, Gradle signs with the upload key" || echo "not set, the AAB stays unsigned for offline signing")"
+          if [ "$HAS_FIREBASE" != true ]; then
+            echo "::warning::GOOGLE_SERVICES_JSON is not visible to this run. The app builds, but will not get a push token."
+          fi
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ${{ env.SDK_PACKAGES }}
+          accept-android-sdk-licenses: true
+
+      - name: Point Tauri at the NDK
+        run: echo "NDK_HOME=$(ls -d "$ANDROID_HOME"/ndk/* | head -1)" >> "$GITHUB_ENV"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Tauri CLI for cargo, the version @tauri-apps/cli has in package-lock.json
+        run: |
+          cargo binstall -y "tauri-cli@$TAURI_CLI_VERSION"
+          cargo tauri --version
+
+      - name: Firebase resources
+        if: env.HAS_FIREBASE == 'true'
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          printf '%s' "$GOOGLE_SERVICES_JSON" > "$RUNNER_TEMP/google-services.json"
+          python3 scripts/firebase-res.py "$RUNNER_TEMP/google-services.json"
+
+      - name: Upload key for Gradle signing
+        if: env.HAS_UPLOAD_KEY == 'true'
+        env:
+          UPLOAD_KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+          UPLOAD_KEY_ALIAS: ${{ secrets.UPLOAD_KEY_ALIAS }}
+          UPLOAD_KEY_PASSWORD: ${{ secrets.UPLOAD_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$UPLOAD_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          umask 077
+          cat > src-tauri/gen/android/keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/upload.jks
+          storePassword=$UPLOAD_KEYSTORE_PASSWORD
+          keyAlias=$UPLOAD_KEY_ALIAS
+          keyPassword=$UPLOAD_KEY_PASSWORD
+          EOF
+
+      - name: versionCode override
+        if: inputs.version_code != ''
+        env:
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, pathlib
+          p = pathlib.Path("src-tauri/tauri.android.conf.json")
+          d = json.loads(p.read_text())
+          d.setdefault("bundle", {}).setdefault("android", {})["versionCode"] = int(os.environ["VERSION_CODE"])
+          p.write_text(json.dumps(d, indent=2) + "\n")
+          print(p.read_text())
+          EOF
+
+      - name: Build
+        run: cargo tauri android build --aab --target aarch64 --target armv7
+
+      - name: What was produced
+        if: always()
+        run: find src-tauri/gen/android -name '*.aab' | sort
+
+      - name: Collect
+        run: |
+          mkdir -p out
+          cp src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab out/
+          (cd out && sha256sum -- *.aab > SHA256SUMS && cat SHA256SUMS)
+          {
+            echo "### Play AAB"
+            echo
+            if [ "$HAS_UPLOAD_KEY" = true ]; then echo "Signed with the upload key."; else echo "**Unsigned.** Sign offline with the upload key before uploading to Play:"; echo; echo '```'; echo 'jarsigner -keystore upload.jks -signedjar app-release.aab app-universal-release.aab <alias>'; echo '```'; fi
+            echo
+            echo '```'; cat out/SHA256SUMS; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-aab-${{ env.HAS_UPLOAD_KEY == 'true' && 'signed' || 'unsigned' }}-${{ github.run_number }}-${{ github.sha }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Remove signing material
         if: always()
-        run: rm -f src-tauri/gen/android/keystore.properties "$RUNNER_TEMP/upload.jks" "$RUNNER_TEMP/test.jks"
+        run: rm -f src-tauri/gen/android/keystore.properties "$RUNNER_TEMP/upload.jks"

@@ -42,13 +42,20 @@ Bez A1–A3 nie ma sensu robić buildów produkcyjnych; bez A4 nie ma iOS.
 1. Sekrety na Vostro: `keystore.jks` i `keystore.properties` w `~/secrets/encedo-authenticator/`
    (przy wariancie A1a) albo nowy keystore (A1b). Sprawdzić w Play Console, czy konto ma
    Play App Signing i czy `keystore.jks` to klucz upload.
-2. AAB z GitHub Actions (`.github/workflows/android.yml`, każdy push na `main` i ręcznie):
-   bez sekretów keystore wychodzi niepodpisany AAB i APK z sumami SHA-256, podpis offline
-   kluczem upload (`jarsigner` dla AAB, `apksigner` dla APK) i dopiero wtedy do Play; z sekretami
-   `UPLOAD_KEYSTORE_B64`, `UPLOAD_KEYSTORE_PASSWORD`, `UPLOAD_KEY_ALIAS`, `UPLOAD_KEY_PASSWORD`
-   Gradle podpisuje na miejscu. Push wymaga sekretu `GOOGLE_SERVICES_JSON`. `versionCode`
-   z `tauri.conf.json` (2000000+, wyżej niż 100030 z v1) albo z pola przy ręcznym uruchomieniu.
-   Zapas lokalny: `scripts/vostro-release-aab.sh` na vostro.
+2. Buildy z GitHub Actions (`.github/workflows/android.yml`, każdy push na `main` i ręcznie),
+   przepis jak w encedo-chat, dwa osobne artefakty:
+   - `android-sideload-…`: APK `.dev` podpisany kluczem deweloperskim z sekretów
+     `ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (opcjonalnie
+     `ANDROID_KEY_PASSWORD`), do instalacji prosto z Actions; ten sam klucz, którym podpisuje
+     vostro, żeby buildy z obu źródeł aktualizowały się nawzajem. Ręczne uruchomienie z zaznaczonym
+     „pre-release” publikuje go też jako GitHub pre-release do pobrania bez konta.
+   - `android-aab-…`: AAB `.v2` dla Play, niepodpisany (podpis offline kluczem upload przez
+     `jarsigner`) albo podpisany przez Gradle, gdy są sekrety `UPLOAD_KEYSTORE_B64`,
+     `UPLOAD_KEYSTORE_PASSWORD`, `UPLOAD_KEY_ALIAS`, `UPLOAD_KEY_PASSWORD`.
+   Push wymaga sekretu `GOOGLE_SERVICES_JSON`; każdy job wypisuje na starcie, które sekrety
+   widzi. `versionCode` AAB z `tauri.conf.json` (2000000+, wyżej niż 100030 z v1) albo z pola
+   przy ręcznym uruchomieniu; APK `.dev` ma 2100000 + numer przebiegu, wyżej niż licznik vostro.
+   Zapas lokalny: `scripts/vostro-release-aab.sh` i `scripts/vostro-dev-apk.sh` na vostro.
 3. Play Console: opis, zrzuty (telefon, 8 sztuk z buildów dev), ikona 512×512,
    grafika promocyjna 1024×500, ocena treści, formularz Data safety (odpowiedzi:
    dane pozostają na urządzeniu, wysyłany jest tylko podpisany werdykt i token push),

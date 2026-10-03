@@ -16,7 +16,7 @@ z cechą `hem`). Symulacja nie zastępuje testu na żywym HEM, ale trzyma ście�
 | Odmowa parowania (`DELETE link`) | 🟡 🧪 | ścieżka rzadka, na żywo niesprawdzona; test sprawdza DELETE i wpis w archiwum |
 | X25519, HMAC-SHA256, AES-128-CBC, JWT HS256 | ✅ | wektory z v1 bajt w bajt, `cargo test` |
 | `allbypid` → `GET event` → dekrypcja scope | ✅ 🧪 | żywy HEM + OIDC, build 15; test: zdarzenie otwierane raz, `pid` w ścieżce w formie URL |
-| Weryfikacja MAC scope, `exp` przed pokazaniem | ✅ 🧪 | **[v2]** v1 tego nie robiło; testy z podmienionym MAC-iem i z wygasłym zdarzeniem |
+| Weryfikacja MAC scope, `exp` przed pokazaniem | ✅ 🧪 | **[v2]** testy z podmienionym MAC-iem i z wygasłym zdarzeniem |
 | Tabela scope’ów i teksty | ✅ | `scope.rs`, nowy głos (STYLE.md), `keytype2string` |
 | Allow z okresem 15 min / 1 h / 8 h / 24 h i `:rw` | ✅ 🧪 | potwierdzone w OIDC; w teście moduł weryfikuje `authreply`, okres spoza listy spada do 15 min |
 | Deny (`DELETE event`) | ✅ 🧪 | |

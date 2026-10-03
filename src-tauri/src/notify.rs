@@ -299,7 +299,7 @@ mod tests {
         assert_eq!(c.email, "");
         // A broker on this device is the one exception (`ENCEDO_BROKER`, tests).
         assert!(PairingCode::parse(r#"{"link":"http://127.0.0.1:1420/notify/pairing/abc"}"#).is_ok());
-        assert!(PairingCode::parse(r#"{"link":"http://vostro/notify/pairing/abc"}"#).is_err());
+        assert!(PairingCode::parse(r#"{"link":"http://192.0.2.1/notify/pairing/abc"}"#).is_err());
         // A host that only begins with the loopback address is a different host.
         assert!(PairingCode::parse(r#"{"link":"http://127.0.0.1.example.com/notify/pairing/abc"}"#).is_err());
         let bare = PairingCode::parse(" https://api.encedo.com/notify/pairing/abc \n").unwrap();

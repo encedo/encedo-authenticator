@@ -37,3 +37,6 @@ Thumbs.db
 # Nested crates build into their own target dirs when tested alone
 src-tauri/crates/*/target/
 src-tauri/plugins/*/target/
+
+# Kotlin daemon scratch
+src-tauri/gen/android/buildSrc/.kotlin/

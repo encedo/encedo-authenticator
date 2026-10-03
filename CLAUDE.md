@@ -2,8 +2,8 @@
 
 Aplikacja mobilna do zatwierdzania żądań dostępu z Encedo HEM (push → allow/deny). Repo ma dwie gałęzie:
 
-- `main`: snapshot v1 (Cordova 12, app 1.0.3 w Google Play jako `com.encedo.mobile.auth.android`). Tylko referencja protokołu i ekranów; nie rozwijamy.
-- `v2`: przepisanie od zera w Tauri 2 na Android i iOS. Tu trwa praca.
+- `v1`: snapshot v1 (Cordova 12, app 1.0.3 w Google Play jako `com.encedo.mobile.auth.android`). Tylko referencja protokołu i ekranów; nie rozwijamy.
+- `main`: v2, przepisanie od zera w Tauri 2 na Android i iOS. Tu trwa praca. Repo na GitHubie (`encedo/encedo-authenticator`) jest publiczne.
 
 Zacznij od `docs/`:
 

@@ -1,6 +1,6 @@
 # Encedo Mobile Authenticator v2 — plan działania
 
-Stan: v0.2, 2 września 2026. Branch `v2`. Wersja HTML tego planu (te same treści, tokeny rkv.pl):
+Stan: v0.2, 2 września 2026. Branch `main` (do 3 października 2026 `v2`). Wersja HTML tego planu (te same treści, tokeny rkv.pl):
 https://claude.ai/code/artifact/f4ba3fed-e466-4009-b3a8-fee980c5c756
 
 Z Cordovy do Tauri 2. Ten sam protokół, nowa aplikacja, Android i iOS. Backend działa i zostaje bez

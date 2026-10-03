@@ -1,6 +1,6 @@
 # Protokół notify z v1 — do przeniesienia 1:1
 
-Zapis z kodu v1 (branch `main`): `www/js/index.js`, `www/js/base.js`, `www/js/scopes.js`. Wektory testowe
+Zapis z kodu v1 (branch `v1`): `www/js/index.js`, `www/js/base.js`, `www/js/scopes.js`. Wektory testowe
 z fazy 0 rozstrzygają każdą wątpliwość co do kodowania. Poprawki dla v2 oznaczone jako **[v2]**.
 
 ## Klucze i identyfikatory

@@ -3,9 +3,9 @@
 The phone half of every sensitive operation on an Encedo HEM: the module asks,
 the phone signs the answer. Android and iOS, built with Tauri 2, Rust and Svelte 5.
 
-- `main`: the v1 Cordova app as published on Google Play (1.0.3). Reference only.
-- `v2`: this rewrite. Start with [`docs/`](docs/): the plan, the protocol, the
-  machines, and the session journal.
+- `v1`: the v1 Cordova app as published on Google Play (1.0.3). Reference only.
+- `main`: this rewrite. Start with [`docs/`](docs/): the plan, the protocol and
+  the parity table. Machine notes and the session journal stay outside the repo.
 
 ## Run it
 

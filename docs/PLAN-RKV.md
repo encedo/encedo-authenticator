@@ -42,8 +42,13 @@ Bez A1–A3 nie ma sensu robić buildów produkcyjnych; bez A4 nie ma iOS.
 1. Sekrety na Vostro: `keystore.jks` i `keystore.properties` w `~/secrets/encedo-authenticator/`
    (przy wariancie A1a) albo nowy keystore (A1b). Sprawdzić w Play Console, czy konto ma
    Play App Signing i czy `keystore.jks` to klucz upload.
-2. `scripts/vostro-release-aab.sh` → AAB, `versionCode` z `tauri.conf.json` (2000000+,
-   wyżej niż 100030 z v1).
+2. AAB z GitHub Actions (`.github/workflows/android.yml`, każdy push na `main` i ręcznie):
+   bez sekretów keystore wychodzi niepodpisany AAB i APK z sumami SHA-256, podpis offline
+   kluczem upload (`jarsigner` dla AAB, `apksigner` dla APK) i dopiero wtedy do Play; z sekretami
+   `UPLOAD_KEYSTORE_B64`, `UPLOAD_KEYSTORE_PASSWORD`, `UPLOAD_KEY_ALIAS`, `UPLOAD_KEY_PASSWORD`
+   Gradle podpisuje na miejscu. Push wymaga sekretu `GOOGLE_SERVICES_JSON`. `versionCode`
+   z `tauri.conf.json` (2000000+, wyżej niż 100030 z v1) albo z pola przy ręcznym uruchomieniu.
+   Zapas lokalny: `scripts/vostro-release-aab.sh` na vostro.
 3. Play Console: opis, zrzuty (telefon, 8 sztuk z buildów dev), ikona 512×512,
    grafika promocyjna 1024×500, ocena treści, formularz Data safety (odpowiedzi:
    dane pozostają na urządzeniu, wysyłany jest tylko podpisany werdykt i token push),
@@ -123,9 +128,8 @@ albo tryb demonstracyjny w aplikacji. Do rozstrzygnięcia przed pierwszym zgłos
 
 - CSP bez `unsafe-eval`, przegląd `capabilities`, logi bez sekretów (dziennik
   diagnostyczny już nie zapisuje materiału kluczy).
-- Zdalne repo: dziś wstrzymane, bo w historii `main` leżą konfigi Firebase, a repo
-  jest publiczne. Przy okazji przeprowadzki: repo prywatne albo historia bez tych
-  plików (te klucze i tak przestaną być używane wraz ze starym projektem).
+- Zdalne repo: `github.com/encedo/encedo-authenticator`, publiczne, od 3 października
+  2026. Historia przepisana bez konfigów Firebase; dziennik i opis maszyn poza repo.
 - Usunąć odpytywanie co 15 s z ekranu Now, gdy push okaże się pewny.
 - Wersjonowanie z jednego źródła, notatki wydania.
 

@@ -222,7 +222,7 @@ jobs:
           APK=$(find src-tauri/gen/android -name '*unsigned*.apk' | head -1 || true)
           test -n "$APK" || { echo "::error::the build produced no unsigned APK to sign"; exit 1; }
           printf '%s' "$KS_B64" | base64 -d > "$RUNNER_TEMP/signing.jks"
-          KPASS="${KEY_PASS:-$KS_PASS}"
+          export KPASS="${KEY_PASS:-$KS_PASS}"   # apksigner reads env:KPASS, so it must be exported
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1 || true)
           test -x "$BT/apksigner" || { echo "::error::no build-tools with apksigner under $ANDROID_HOME"; exit 1; }
           mkdir -p out

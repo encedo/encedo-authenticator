@@ -123,7 +123,10 @@ jobs:
       # Said plainly and early, because the alternative is twenty minutes of
       # Rust followed by an error nobody can read.
       - name: Which secrets this run can see
+        env:
+          SECRET_NAMES: ${{ toJSON(secrets) }}   # names only; GitHub masks the values
         run: |
+          echo "secret names visible to this job: $(jq -r 'keys | join(", ")' <<<"$SECRET_NAMES")"
           echo "GOOGLE_SERVICES_JSON: $([ "$HAS_FIREBASE" = true ] && echo set || echo MISSING)"
           echo "ANDROID_KEYSTORE_B64 + ANDROID_KEYSTORE_PASSWORD + ANDROID_KEY_ALIAS: $([ "$HAS_SIGNING_KEY" = true ] && echo set || echo MISSING)"
           if [ "$HAS_SIGNING_KEY" != true ]; then
@@ -284,7 +287,10 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Which secrets this run can see
+        env:
+          SECRET_NAMES: ${{ toJSON(secrets) }}   # names only; GitHub masks the values
         run: |
+          echo "secret names visible to this job: $(jq -r 'keys | join(", ")' <<<"$SECRET_NAMES")"
           echo "GOOGLE_SERVICES_JSON: $([ "$HAS_FIREBASE" = true ] && echo set || echo MISSING)"
           echo "UPLOAD_KEYSTORE_B64: $([ "$HAS_UPLOAD_KEY" = true ] && echo "set, Gradle signs with the upload key" || echo "not set, the AAB stays unsigned for offline signing")"
           if [ "$HAS_FIREBASE" != true ]; then

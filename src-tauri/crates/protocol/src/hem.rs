@@ -256,6 +256,28 @@ mod tests {
         assert_eq!(granted, Granted { scope: "storage:disk:home:rw".into(), pid: "pid-1".into(), iat: 1_000, exp: 1_000 + PERIODS[1] });
     }
 
+    /// FW 1.3.x multi-scope: `:rw` lands on the drive value, not at the end of the list.
+    #[test]
+    fn allow_several_values() {
+        let hem = Hem::with_seeds(7, 9);
+        let phone = KeyPair::from_secret([3u8; 32]);
+        let aid = b64(&phone.public_bytes());
+        let eid = b64_decode_32(&hem.eid()).unwrap();
+
+        for (asked, writable, expected) in [
+            ("storage:disk0 keymgmt:list", true, "storage:disk0:rw keymgmt:list"),
+            ("storage:disk0:rw keymgmt:list", false, "storage:disk0 keymgmt:list"),
+            ("keymgmt:list storage:disk1:ro", true, "keymgmt:list storage:disk1:rw"),
+            ("keymgmt:use:2ba3 logger:get#eyJ0IjoiQUMxNiJ9", false, "keymgmt:use:2ba3 logger:get#eyJ0IjoiQUMxNiJ9"),
+        ] {
+            let ev = hem.event(&aid, "amNRPXl5", asked, 2_000_000_000).unwrap();
+            let opened = open_scope(&ev, &phone, &eid, 1_000).unwrap();
+            let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, writable, 1_000, PERIODS[0]).unwrap();
+            let body = serde_json::to_value(&reply).unwrap();
+            assert_eq!(hem.check_allow(&aid, "amNRPXl5", &body).unwrap().scope, expected, "{asked}");
+        }
+    }
+
     #[test]
     fn tampered_scope_and_wrong_phone_are_caught() {
         let hem = Hem::with_seeds(7, 9);

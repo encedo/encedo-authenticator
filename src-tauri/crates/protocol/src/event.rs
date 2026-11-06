@@ -122,15 +122,16 @@ pub struct AllowReply {
     pub exp: u64,
 }
 
-/// Grant `scope` (as decrypted) for `period_secs` from `now`, with `:rw`
-/// appended when `writable` (and stripped otherwise, as v1 does).
+/// Grant `scope` (as decrypted) for `period_secs` from `now`, with `:rw` on
+/// the drive value when `writable` (and stripped otherwise, as v1 does).
 pub fn allow(event: &Event, app: &KeyPair, eid_b64: &str, pid: &str, scope: &str, writable: bool, now: u64, period_secs: u64) -> Result<AllowReply> {
     let eid = b64_decode_32(eid_b64).ok_or(Error::Malformed("eid"))?;
     let epk = b64_decode_32(&event.epk).ok_or(Error::Malformed("epk"))?;
-    let mut granted = scope.replace(":rw", "");
-    if writable {
-        granted.push_str(":rw");
-    }
+    // FW 1.3.x: `:rw` belongs to the storage value of a list (one at most), `#<meta>` stays at the end
+    let meta = scope.find('#').map_or("", |i| &scope[i..]);
+    let list = &scope[..scope.len() - meta.len()];
+    let mut granted = list.split(' ').map(|v| grant_value(v, writable)).collect::<Vec<_>>().join(" ");
+    granted.push_str(meta);
     let session = Session::derive(app, &eid, &event.jti)?;
     let exp = now + period_secs;
     let claims = AllowClaims {
@@ -145,6 +146,15 @@ pub fn allow(event: &Event, app: &KeyPair, eid_b64: &str, pid: &str, scope: &str
     let jwt = sign_hs256(&claims, &session.s1);
     let mac = b64(&hmac_sha256(&app.shared(&epk), jwt.as_bytes()));
     Ok(AllowReply { authreply: jwt, mac, scope: granted, exp })
+}
+
+/// One value as granted: a drive read-write when `writable`, otherwise without `:rw`.
+fn grant_value(value: &str, writable: bool) -> String {
+    let base = value.trim_end_matches(":rw");
+    match writable && value.starts_with("storage:disk") {
+        true => format!("{}:rw", base.trim_end_matches(":ro")),
+        false => base.to_string(),
+    }
 }
 
 /// Access periods offered by the UI, in seconds. v1: 15 min default, 1 h, 8 h, 24 h.

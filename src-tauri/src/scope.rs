@@ -31,7 +31,53 @@ fn view(kind: &str, title: &str, phrase: &str) -> ScopeView {
     ScopeView { kind: kind.into(), title: title.into(), phrase: phrase.into(), details: Vec::new(), ask_period: true, ask_writable: false, writable_default: false, known: true }
 }
 
+/// A scope as the module seals it (FW 1.3.x): values separated by spaces, and
+/// once at the end `#<meta>` for the first `keymgmt:use:` value. One value is
+/// described as before; several make one request, unknown if any value is.
 pub fn describe(scope: &str) -> ScopeView {
+    let (list, mut meta) = scope.split_once('#').map_or((scope, None), |(l, m)| (l, Some(m)));
+    let values: Vec<&str> = list.split(' ').collect();
+    if values.len() == 1 {
+        return describe_one(scope);
+    }
+    let views: Vec<ScopeView> = values
+        .iter()
+        .map(|v| match meta.filter(|_| v.starts_with("keymgmt:use:")) {
+            Some(m) => {
+                meta = None;
+                describe_one(&format!("{v}#{m}"))
+            }
+            None => describe_one(v),
+        })
+        .collect();
+    if views.iter().any(|v| !v.known) {
+        return unknown();
+    }
+    let titles: Vec<&str> = views.iter().map(|v| v.title.as_str()).collect();
+    let phrases: Vec<&str> = views.iter().map(|v| v.phrase.as_str()).collect();
+    let mut v = view("multi", &titles.join(" + "), &join_and(&phrases));
+    for (value, one) in values.iter().zip(&views) {
+        v.details.push(Detail { label: one.title.clone(), value: value.to_string(), mono: true });
+        v.details.extend(one.details.iter().filter(|d| !d.mono).cloned());
+    }
+    v.ask_writable = views.iter().any(|o| o.ask_writable);
+    v.writable_default = views.iter().any(|o| o.writable_default);
+    v
+}
+
+fn unknown() -> ScopeView {
+    ScopeView { known: false, ask_period: false, ..view("unknown", "Unknown request", "do something this app does not know") }
+}
+
+/// "a", "a and b", "a, b and c".
+fn join_and(parts: &[&str]) -> String {
+    match parts.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+        _ => parts.concat(),
+    }
+}
+
+fn describe_one(scope: &str) -> ScopeView {
     match scope {
         "system:config" => view("system", "Change the configuration", "change its configuration"),
         "system:upgrade" => view("system", "Update the software", "install a software update"),
@@ -41,6 +87,7 @@ pub fn describe(scope: &str) -> ScopeView {
         "logger:del" => view("logger", "Delete the log", "delete the log"),
         "keymgmt:del" => view("keymgmt", "Delete a key", "delete a key"),
         "keymgmt:list" => view("keymgmt", "List the keys", "list the keys"),
+        "keymgmt:search" => view("keymgmt", "Search the keys", "search its keys"),
         "keymgmt:get" => view("keymgmt", "Read a public key", "hand over a public key"),
         "keymgmt:gen" => view("keymgmt", "Generate a key", "generate a new key"),
         "keymgmt:upd" => view("keymgmt", "Update a key", "update a key"),
@@ -50,13 +97,13 @@ pub fn describe(scope: &str) -> ScopeView {
         "auth:ext:pair" => view("auth", "Pair a phone", "pair another phone"),
         s if s.starts_with("storage:disk") => storage(s),
         s if s.starts_with("keymgmt:use:") => key_use(s),
-        _ => ScopeView { known: false, ask_period: false, ..view("unknown", "Unknown request", "do something this app does not know") },
+        _ => unknown(),
     }
 }
 
 fn storage(scope: &str) -> ScopeView {
     let rw = scope.ends_with(":rw");
-    let disk = scope.trim_end_matches(":rw").trim_start_matches("storage:");
+    let disk = scope.trim_end_matches(":rw").trim_end_matches(":ro").trim_start_matches("storage:");
     let mut v = view("storage", "Unlock a drive", &format!("unlock {disk}"));
     v.ask_writable = true;
     v.writable_default = rw;
@@ -148,5 +195,23 @@ mod tests {
         assert_eq!(v.details[1].value, "PKEY,ECDH,ExDSA,ED25519");
         assert!(v.known);
         assert!(!describe("weird:thing").known);
+    }
+
+    #[test]
+    fn several_values_make_one_request() {
+        let v = describe("keymgmt:list system:config");
+        assert!(v.known && !v.ask_writable);
+        assert_eq!(v.phrase, "list the keys and change its configuration");
+        assert_eq!(v.details.len(), 2);
+        assert!(!describe("keymgmt:list weird:thing").known);
+        assert_eq!(describe("storage:disk0 keymgmt:list").phrase, "unlock disk0 and list the keys");
+
+        // The meta at the end of the list belongs to the first keymgmt:use value.
+        let meta = encedo_protocol::codec::b64(br#"{"t":"AC16","l":"PGP main"}"#);
+        let v = describe(&format!("logger:get keymgmt:use:2ba3 storage:disk1:ro#{meta}"));
+        assert_eq!(v.phrase, "hand over the log, use key PGP main and unlock disk1");
+        assert!(v.ask_writable && !v.writable_default);
+        assert_eq!(v.details[1].value, "keymgmt:use:2ba3");
+        assert_eq!(v.details[3].value, "PGP main");
     }
 }

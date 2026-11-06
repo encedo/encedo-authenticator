@@ -877,6 +877,7 @@ impl Core {
 
     pub async fn allow(&self, id: &str, period_secs: u64, writable: bool) -> Result<AnswerView, CoreError> {
         let r = self.take_live(id)?;
+        let writable = writable && r.view.ask_writable;
         let module = self.with_store(|s| Ok(s.data.module(&r.pid).cloned()))?.ok_or_else(|| CoreError::State("module gone".into()))?;
         let app = KeyPair::from_secret(b64_decode_32(&module.aid_prv).ok_or(CoreError::State("bad aid_prv".into()))?);
         let period = if event::PERIODS.contains(&period_secs) { period_secs } else { event::PERIODS[0] };

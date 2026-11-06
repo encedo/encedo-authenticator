@@ -72,8 +72,8 @@ export const journal: LogEntry[] = [
   entry("app.launched", "App launched", "2.0.0-dev.16 · 2 module(s) paired", "", undefined, now - 6 * day - 120),
 ];
 
-export type DemoKind = "keymgmt:use" | "storage:disk" | "system:upgrade" | "logger:del" | "auth:ext:pair";
-export const demoScopes: DemoKind[] = ["keymgmt:use", "storage:disk", "system:upgrade", "logger:del", "auth:ext:pair"];
+export type DemoKind = "keymgmt:use" | "storage:disk" | "system:upgrade" | "logger:del" | "auth:ext:pair" | "multi";
+export const demoScopes: DemoKind[] = ["keymgmt:use", "storage:disk", "system:upgrade", "logger:del", "auth:ext:pair", "multi"];
 
 const catalogue: Record<DemoKind, { title: string; phrase: string; scope: string; details: RequestView["details"]; ask_writable?: boolean; writable_default?: boolean }> = {
   "keymgmt:use": { title: "Use the key", phrase: "use key PGP main", scope: "keymgmt:use:2ba3f1e0c9a4b7d8e6f5a3c2b1d0e9f84c91e#eyJ0IjoiQUMxNiIsImwiOiJQR1AgbWFpbiJ9", details: [{ label: "Key id", value: "2ba3f1e0c9a4b7d8e6f5a3c2b1d0e9f84c91e", mono: true }, { label: "Type", value: "PKEY,ECDH,ExDSA,ED25519", mono: false }, { label: "Label", value: "PGP main", mono: false }] },
@@ -81,6 +81,13 @@ const catalogue: Record<DemoKind, { title: string; phrase: string; scope: string
   "system:upgrade": { title: "Update the software", phrase: "install a software update", scope: "system:upgrade", details: [] },
   "logger:del": { title: "Delete the log", phrase: "delete the log", scope: "logger:del", details: [] },
   "auth:ext:pair": { title: "Pair a phone", phrase: "pair another phone", scope: "auth:ext:pair", details: [] },
+  // FW 1.3.x list (DEV-436): what describe() makes of three values, the key meta at the end
+  "multi": {
+    title: "Read the log + Use the key + Unlock a drive", phrase: "hand over the log, use key PGP main and unlock disk1",
+    scope: "logger:get keymgmt:use:2ba3f1e0c9a4b7d8e6f5a3c2b1d0e9f8 storage:disk1#eyJ0IjoiQUMxNiIsImwiOiJQR1AgbWFpbiJ9",
+    details: [{ label: "Read the log", value: "logger:get", mono: true }, { label: "Use the key", value: "keymgmt:use:2ba3f1e0c9a4b7d8e6f5a3c2b1d0e9f8", mono: true }, { label: "Type", value: "PKEY,ECDH,ExDSA,ED25519", mono: false }, { label: "Label", value: "PGP main", mono: false }, { label: "Unlock a drive", value: "storage:disk1", mono: true }],
+    ask_writable: true,
+  },
 };
 
 let seq = 0;
@@ -97,7 +104,13 @@ export function makeRequest(kind: DemoKind, mod: ModuleView): RequestView {
 export function scopeTitle(kind: DemoKind): string { return catalogue[kind].title; }
 
 export function summary(req: RequestView, periodSecs: number, writable: boolean): string {
-  const base = req.scope.replace(":rw", "") + (req.ask_writable && writable ? ":rw" : "");
+  // as event::allow: :rw on the drive value only, the #meta stays at the end
+  const i = req.scope.indexOf("#");
+  const meta = i < 0 ? "" : req.scope.slice(i);
+  const rw = req.ask_writable && writable;
+  const base = (i < 0 ? req.scope : req.scope.slice(0, i)).split(" ")
+    .map((v) => { const b = v.replace(/:rw$/, ""); return rw && v.startsWith("storage:disk") ? b.replace(/:ro$/, "") + ":rw" : b; })
+    .join(" ") + meta;
   const label = { 900: "15 min", 3600: "1 h", 28800: "8 h", 86400: "24 h" }[periodSecs] ?? `${periodSecs / 60} min`;
   return `${base} · ${label}`;
 }

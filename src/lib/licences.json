@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-13",
+ "generated": "2026-11-08",
  "groups": [
   {
    "id": "rust",
@@ -1179,6 +1179,23 @@
      "c": "Copyright (c) 2017 - Present Tauri Apps Contributors"
     },
     {
+     "n": "tauri-plugin-clipboard-manager",
+     "v": "2.3.3",
+     "l": "Apache-2.0 OR MIT",
+     "c": "Copyright (c) 2017 - Present Tauri Apps Contributors"
+    },
+    {
+     "n": "tauri-plugin-deep-link",
+     "v": "2.4.10",
+     "l": "Apache-2.0 OR MIT",
+     "c": "Copyright (c) 2017 - Present Tauri Apps Contributors"
+    },
+    {
+     "n": "tauri-plugin-encedo-update",
+     "v": "0.1.0",
+     "l": "?"
+    },
+    {
      "n": "tauri-runtime",
      "v": "2.11.3",
      "l": "Apache-2.0 OR MIT",
@@ -1317,6 +1334,12 @@
     {
      "n": "tracing",
      "v": "0.1.44",
+     "l": "MIT",
+     "c": "Copyright (c) 2019 Tokio Contributors"
+    },
+    {
+     "n": "tracing-attributes",
+     "v": "0.1.31",
      "l": "MIT",
      "c": "Copyright (c) 2019 Tokio Contributors"
     },

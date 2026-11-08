@@ -78,7 +78,25 @@ pub struct PairingCode {
 impl PairingCode {
     /// v1 Manager: JSON `{link, user, hostname, email}`. A bare https link is
     /// accepted too, so a future Manager that encodes only the link still pairs.
+    ///
+    /// The Manager on the same phone hands the same JSON over as
+    /// `encedo-auth://pair?qr=<base64url>` (the "Open in Authenticator" button,
+    /// or pasted). That form is unwrapped here, so a scan, a paste and an opened
+    /// link all go through one parser; a code that came by link must carry both
+    /// `link` and `hash`.
     pub fn parse(raw: &str) -> Result<Self, NotifyError> {
+        let raw = raw.trim();
+        if let Some(text) = pair_link_text(raw)? {
+            let code = Self::parse_text(&text)?;
+            if code.hash.trim().is_empty() {
+                return Err(NotifyError::BadResponse("the pairing link carries no hash; show a fresh code in the Manager".into()));
+            }
+            return Ok(code);
+        }
+        Self::parse_text(raw)
+    }
+
+    fn parse_text(raw: &str) -> Result<Self, NotifyError> {
         let raw = raw.trim();
         let code: PairingCode = if raw.starts_with("https://") {
             PairingCode { link: raw.to_string(), hash: String::new(), user: String::new(), hostname: String::new(), email: String::new() }
@@ -90,6 +108,60 @@ impl PairingCode {
         }
         Ok(code)
     }
+}
+
+/// The scheme the Manager's "Open in Authenticator" button opens.
+pub const PAIR_SCHEME: &str = "encedo-auth";
+
+/// `encedo-auth://pair?qr=<base64url of the QR JSON>` → the QR JSON. `None`
+/// when `raw` is not in the app's scheme at all (a scanned or pasted JSON); an
+/// error when it is, but is not a pairing link this app can read. Only the
+/// transport is unwrapped: what the JSON says is checked by the caller.
+pub fn pair_link_text(raw: &str) -> Result<Option<String>, NotifyError> {
+    let bad = |why: &str| NotifyError::BadResponse(format!("this is not a pairing link: {why}"));
+    let Some((scheme, rest)) = raw.split_once(':') else { return Ok(None) };
+    if !scheme.eq_ignore_ascii_case(PAIR_SCHEME) {
+        return Ok(None);
+    }
+    let rest = rest.strip_prefix("//").ok_or_else(|| bad("no host"))?;
+    let rest = rest.split('#').next().unwrap_or_default();
+    let (authority, query) = rest.split_once('?').unwrap_or((rest, ""));
+    let host = authority.strip_suffix('/').unwrap_or(authority);
+    if !host.eq_ignore_ascii_case("pair") {
+        return Err(bad("the link is not for pairing"));
+    }
+    let qr = query
+        .split('&')
+        .find_map(|p| p.strip_prefix("qr="))
+        .map(percent_decode)
+        .filter(|q| !q.is_empty())
+        .ok_or_else(|| bad("the link carries no code"))?;
+    // base64url without padding; `b64url_decode` also takes padding and the
+    // standard alphabet, and refuses anything else.
+    let bytes = encedo_protocol::codec::b64url_decode(&qr).ok_or_else(|| bad("the code in the link is damaged"))?;
+    let text = String::from_utf8(bytes).map_err(|_| bad("the code in the link is not text"))?;
+    Ok(Some(text))
+}
+
+/// `%XX` escapes, which a browser may add around `=`. Anything malformed is
+/// left as it is, so the base64 decoder refuses it.
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let hex = |c: u8| (c as char).to_digit(16);
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2])) {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// The pairing link must be https. The one exception is a broker on this
@@ -305,6 +377,69 @@ mod tests {
         let bare = PairingCode::parse(" https://api.encedo.com/notify/pairing/abc \n").unwrap();
         assert_eq!(bare.link, "https://api.encedo.com/notify/pairing/abc");
         assert!(PairingCode::parse("hello").is_err());
+    }
+
+    /// The example the Manager's task gives, link and JSON byte for byte.
+    const LINK: &str = "encedo-auth://pair?qr=eyJsaW5rIjoiaHR0cHM6Ly9hcGkuZW5jZWRvLmNvbS9ub3RpZnkvcmVnaXN0ZXIvRVhBTVBMRSIsImhhc2giOiJuNGJRZ1loTWZXV2FMK3FneFZyUUZhTy9UeHNyQzRJczBWMXNGYkR2MnU4PSIsInVzZXIiOiJBbm4iLCJlbWFpbCI6ImFubkBleGFtcGxlLmNvbSIsImhvc3RuYW1lIjoidGVzdC5wbGF5Z3JvdW5kLmVuY2UuZG8ifQ";
+    const JSON: &str = r#"{"link":"https://api.encedo.com/notify/register/EXAMPLE","hash":"n4bQgYhMfWWaL+qgxVrQFaO/TxsrC4Is0V1sFbDv2u8=","user":"Ann","email":"ann@example.com","hostname":"test.playground.ence.do"}"#;
+
+    fn link_for(json: &str) -> String {
+        format!("encedo-auth://pair?qr={}", encedo_protocol::codec::b64url(json.as_bytes()))
+    }
+
+    #[test]
+    fn pair_link_carries_the_qr_json_exactly() {
+        assert_eq!(pair_link_text(LINK).unwrap().as_deref(), Some(JSON));
+        // Pasted with whitespace around it, or with the padding a decoder might want.
+        assert_eq!(PairingCode::parse(&format!("  {LINK}\n")).unwrap(), PairingCode::parse(JSON).unwrap());
+        let padded = format!("{LINK}{}", "=".repeat((4 - LINK.split("qr=").nth(1).unwrap().len() % 4) % 4));
+        assert_eq!(pair_link_text(&padded).unwrap().as_deref(), Some(JSON));
+        assert_eq!(pair_link_text(&padded.replace('=', "%3D").replacen("pair?qr%3D", "pair?qr=", 1)).unwrap().as_deref(), Some(JSON));
+        let c = PairingCode::parse(LINK).unwrap();
+        assert_eq!(c.link, "https://api.encedo.com/notify/register/EXAMPLE");
+        assert_eq!(c.hash, "n4bQgYhMfWWaL+qgxVrQFaO/TxsrC4Is0V1sFbDv2u8=");
+        assert_eq!((c.user.as_str(), c.email.as_str(), c.hostname.as_str()), ("Ann", "ann@example.com", "test.playground.ence.do"));
+    }
+
+    #[test]
+    fn pair_link_keeps_utf8_and_both_alphabets() {
+        // "Zoë" plus bytes that encode to `-` and `_` in base64url.
+        let json = r#"{"link":"https://api.encedo.com/notify/register/X","hash":"h","user":"Zoë ~~~ ???","hostname":"h.ence.do"}"#;
+        let link = link_for(json);
+        assert!(link.contains('-') || link.contains('_'), "{link}");
+        assert_eq!(pair_link_text(&link).unwrap().as_deref(), Some(json));
+        assert_eq!(PairingCode::parse(&link).unwrap().user, "Zoë ~~~ ???");
+    }
+
+    #[test]
+    fn pair_link_refuses_what_it_cannot_read() {
+        let json = r#"{"link":"https://api.encedo.com/notify/register/X","hash":"h"}"#;
+        let qr = encedo_protocol::codec::b64url(json.as_bytes());
+        assert!(PairingCode::parse(&format!("encedo-auth://pair?qr={qr}")).is_ok());
+        for bad in [
+            "encedo-auth://pair".to_string(),
+            "encedo-auth://pair?".to_string(),
+            "encedo-auth://pair?qr=".to_string(),
+            format!("encedo-auth://pair?code={qr}"),
+            format!("encedo-auth://unpair?qr={qr}"),
+            format!("encedo-auth://pairs?qr={qr}"),
+            format!("encedo-auth:pair?qr={qr}"),
+            "encedo-auth://pair?qr=@@not*base64@@".to_string(),
+            "encedo-auth://pair?qr=abcde".to_string(),
+            // Not UTF-8, not JSON, no link, no hash, an http link.
+            format!("encedo-auth://pair?qr={}", encedo_protocol::codec::b64url(&[0xff, 0xfe, 0x00])),
+            link_for("hello"),
+            link_for(r#"{"hash":"h","user":"Ann"}"#),
+            link_for(r#"{"link":"https://api.encedo.com/notify/register/X","user":"Ann"}"#),
+            link_for(r#"{"link":"https://api.encedo.com/notify/register/X","hash":" "}"#),
+            link_for("https://api.encedo.com/notify/register/X"),
+            link_for(r#"{"link":"http://192.0.2.1/notify/register/X","hash":"h"}"#),
+        ] {
+            assert!(PairingCode::parse(&bad).is_err(), "accepted {bad}");
+        }
+        // Not this app's scheme: the parser treats it as a plain code, and refuses it as one.
+        assert_eq!(pair_link_text("other://pair?qr=e30").unwrap(), None);
+        assert!(PairingCode::parse("other://pair?qr=e30").is_err());
     }
 
     #[tokio::test]

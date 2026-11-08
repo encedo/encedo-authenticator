@@ -154,6 +154,48 @@ async fn pairing_stores_the_module_and_the_module_accepts_the_reply() {
     assert!(f.core.pair_scan(&qr).await.expect("second scan").already_paired);
 }
 
+/// The Manager on the same phone: "Open in Authenticator" opens the QR JSON as
+/// `encedo-auth://pair?qr=<base64url>`, "Copy link" copies the JSON itself.
+fn pair_link(qr: &str) -> String {
+    format!("encedo-auth://pair?qr={}", encedo_protocol::codec::b64url(qr.as_bytes()))
+}
+
+#[tokio::test]
+async fn a_link_or_a_pasted_code_reads_like_a_scan() {
+    let f = Fixture::new().await;
+    let (_, qr) = f.offer("jti-pair");
+    let scanned = serde_json::to_value(f.core.pair_scan(&qr).await.expect("scan")).unwrap();
+    let opened = serde_json::to_value(f.core.pair_scan(&pair_link(&qr)).await.expect("link")).unwrap();
+    let pasted = serde_json::to_value(f.core.pair_scan(&format!("\n{qr}  ")).await.expect("paste")).unwrap();
+    assert_eq!(opened, scanned);
+    assert_eq!(pasted, scanned);
+    assert_eq!(f.broker.count("GET", "/notify/pairing/"), 3);
+
+    // And the pairing that follows a link is the same as after a scan.
+    f.broker.on("POST", "/notify/pairing/", 200, &format!(r#"{{"pid":"{PID}"}}"#));
+    let module = f.core.pair_confirm("", "fid-abc").await.expect("confirm");
+    assert_eq!((module.pid.as_str(), module.host.as_str()), (PID, "hem.example.org"));
+}
+
+#[tokio::test]
+async fn a_bad_link_is_refused_before_anything_is_sent() {
+    let f = Fixture::new().await;
+    let (_, qr) = f.offer("jti-pair");
+    let no_hash = format!(r#"{{"link":"{}","user":"chris"}}"#, f.link());
+    let no_link = r#"{"hash":"n4bQgYhMfWWaL+qgxVrQFaO/TxsrC4Is0V1sFbDv2u8=","user":"chris"}"#;
+    for bad in [
+        "encedo-auth://pair".to_string(),
+        "encedo-auth://pair?qr=%%%broken%%%".to_string(),
+        pair_link(&qr).replace("://pair?", "://other?"),
+        pair_link(&no_hash),
+        pair_link(no_link),
+    ] {
+        let e = view(f.core.pair_scan(&bad).await.expect_err("bad link"));
+        assert_eq!(e.code, "bad_response", "{bad}: {e:?}");
+    }
+    assert!(f.broker.seen().is_empty(), "nothing may be sent for a bad link: {:?}", f.broker.seen());
+}
+
 #[tokio::test]
 async fn a_code_whose_hash_does_not_match_the_link_is_refused() {
     let f = Fixture::new().await;

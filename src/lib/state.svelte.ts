@@ -2,6 +2,7 @@ import type { Settings } from "./api";
 import { api, ApiError, type AnswerView, type AuditHealth, type Family, type LogEntry, type ModuleView, type Outcome, type PairingPreview, type RefreshReport, type RequestView, type StoreStatus, type UpdateStatus } from "./api";
 import { biometricAuth, inTauri, trace, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
 import * as mock from "./mock";
+import { listen } from "@tauri-apps/api/event";
 
 export type Screen =
   | { name: "welcome" }
@@ -58,6 +59,9 @@ class AppState {
   /** Lock screen state. */
   unlocking = $state(false);
   lockError = $state<{ code?: string; message: string } | null>(null);
+  /** A pairing link that arrived while another pairing was on screen: the
+   *  person decides whether it replaces that one. */
+  incomingLink = $state<string | null>(null);
   private returnTo: Screen | null = null;
   private static readonly LOCK_AFTER_MS = 5000;
 
@@ -102,6 +106,9 @@ class AppState {
     } finally {
       this.ready = true;
     }
+    // The Manager open on this phone hands its pairing code over by link.
+    void listen("pair-link", () => void this.checkPairLink()).catch(() => {});
+    void this.checkPairLink();
     void this.checkUpdate();
     this.push = await startPush({
       onToken: (token) => { this.push = { ...this.push, status: "registered", token }; void api.pushTokenChanged(token).catch(() => {}); },
@@ -301,6 +308,7 @@ class AppState {
     this.screen = { name: "home" };
     void this.askPushPermission();
     void this.refresh();
+    void this.checkPairLink();
   }
 
   async askPushPermission() {
@@ -380,6 +388,7 @@ class AppState {
     this.screen = this.returnTo ?? { name: "home" };
     this.returnTo = null;
     void this.refresh(this.screen.name === "home");
+    void this.checkPairLink();
   }
 
   /** The lock is both the screen lock and the protection of the storage key, so
@@ -493,6 +502,54 @@ class AppState {
     void this.refresh(false);
   }
 
+  /** Take a waiting `encedo-auth://pair` link once a pairing can be shown: the
+   *  storage is open and the person is past the Welcome and Lock screens. The
+   *  link stays in the core until then. A pairing already on screen is not
+   *  replaced without asking. */
+  async checkPairLink() {
+    if (!inTauri || !this.ready || !this.storeStatus?.open || !this.settings.onboarded) return;
+    if (this.screen.name === "lock" || this.screen.name === "welcome" || this.unlocking) return;
+    const link = await api.pairLinkTake().catch(() => null);
+    if (!link) return;
+    trace("pair link opened");
+    if (this.screen.name === "pairConfirm") { this.incomingLink = link; return; }
+    await this.scanned(link);
+  }
+
+  /** The person chose the link over the pairing on screen. */
+  async acceptIncomingLink() {
+    const link = this.incomingLink;
+    this.incomingLink = null;
+    if (link) await this.scanned(link);
+  }
+
+  dismissIncomingLink() { this.incomingLink = null; }
+
+  /** "Paste code": the core reads the clipboard now, and only now. An empty
+   *  clipboard is said on the Pair screen (the message is returned); a code
+   *  that fails goes the way a scanned one does. */
+  async pasteCode(): Promise<string | null> {
+    if (!inTauri) {
+      const text = (await navigator.clipboard?.readText().catch(() => "")) ?? "";
+      if (!text.trim()) return "The clipboard is empty.";
+      await this.scanned(text.trim());
+      return null;
+    }
+    this.busy = true;
+    try {
+      const preview = await api.pairPaste();
+      this.incomingLink = null;
+      this.screen = { name: "pairConfirm", preview, raw: "" };
+      return null;
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "clipboard") return e.message;
+      this.fail(e, "The code could not be read.");
+      return null;
+    } finally {
+      this.busy = false;
+    }
+  }
+
   async scanned(raw: string) {
     if (!inTauri) {
       this.screen = { name: "pairConfirm", preview: { link: raw, user: "chris", hostname: "hem-wh.encedo.local", email: "chris@encedo.com", issuer: { city: "Warsaw", country: "PL", ip: "203.0.113.7" }, already_paired: false }, raw };
@@ -501,6 +558,7 @@ class AppState {
     this.busy = true;
     try {
       const preview = await api.pairScan(raw);
+      this.incomingLink = null;
       this.screen = { name: "pairConfirm", preview, raw };
     } catch (e) {
       this.fail(e, "The code could not be read.");
@@ -510,6 +568,7 @@ class AppState {
   }
 
   async completePairing(label: string, preview: PairingPreview) {
+    this.incomingLink = null;
     if (!inTauri) {
       const pid = crypto.randomUUID();
       this.modules = [...this.modules, { pid, aid: "mock-key-not-a-real-aid", label, host: preview.hostname, user: preview.user, email: preview.email, paired_at: Math.floor(Date.now() / 1000), last_used: null }];
@@ -529,6 +588,7 @@ class AppState {
   }
 
   async refusePairing(preview: PairingPreview) {
+    this.incomingLink = null;
     if (inTauri) { try { await api.pairRefuse(this.push.token); } catch { /* best effort */ } await this.reloadModules(); }
     this.screen = { name: "result", outcome: "denied", title: "Pair this phone", detail: preview.hostname };
   }

@@ -35,6 +35,19 @@
         </h1>
       {/if}
     </div>
+    {#if app.incomingLink}
+      <!-- A second pairing code came by link: never swap the one on screen without asking. -->
+      <div class="card">
+        <div class="card-head"><span>Another pairing code</span><span class="v">link</span></div>
+        <div class="card-body">
+          <p>The Manager opened a new pairing code. Show it instead of this one?</p>
+          <div class="row-actions">
+            <button class="button small plain" disabled={app.busy} onclick={() => app.dismissIncomingLink()}>Keep this one</button>
+            <button class="button small" disabled={app.busy} onclick={() => app.acceptIncomingLink()}>Show the new code</button>
+          </div>
+        </div>
+      </div>
+    {/if}
     <div class="card asking">
       <div class="card-head"><span>Request</span><span class="v">auth:ext:pair</span></div>
       <dl class="status-grid">

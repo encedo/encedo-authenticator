@@ -100,7 +100,12 @@ export const api = {
   logApp: (kind: string, title: string, summary: string) => call<void>("log_app", { kind, title, summary }),
   /** Going to the background: write out what the commentary has collected. */
   logFlush: () => call<void>("log_flush"),
+  /** A scanned code, a pasted one, or an `encedo-auth://pair?qr=…` link: one parser. */
   pairScan: (raw: string) => call<PairingPreview>("pair_scan", { raw }),
+  /** "Paste code": the core reads the clipboard, only on this call. */
+  pairPaste: () => call<PairingPreview>("pair_paste"),
+  /** The pairing link the system opened the app with, once; null when none waits. */
+  pairLinkTake: () => call<string | null>("pair_link_take"),
   pairConfirm: (label: string, fid?: string) => call<ModuleView>("pair_confirm", { label, fid }),
   pairRefuse: (fid?: string) => call<void>("pair_refuse", { fid }),
   refresh: () => call<RequestView[]>("requests_refresh"),

@@ -32,5 +32,17 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": [
+            "encedo-auth"
+          ],
+          "host": "pair"
+        }
+      ]
+    }
   }
 }

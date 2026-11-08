@@ -8,7 +8,7 @@
   let status = $state<"idle" | "scanning" | "denied" | "error">("idle");
   let error = $state("");
   let pasted = $state("");
-  let pasting = $state(!inTauri);
+  let pasteNote = $state("");
   let alive = true;
 
   // The camera's own zoom, where it has one: same plan as encedo-chat
@@ -56,6 +56,11 @@
   onDestroy(() => { alive = false; void cancelScan(); });
 
   function leave() { app.go({ name: "modules" }); }
+
+  async function paste() {
+    if (status === "scanning") { await cancelScan(); status = "idle"; }
+    pasteNote = (await app.pasteCode()) ?? "";
+  }
 </script>
 
 <div class="screen">
@@ -71,15 +76,17 @@
         <p class="mono" style="font-size:12.5px">{error}</p>
       {:else}
         <h1>Scan the code the Manager shows.</h1>
+        <p>Manager on this phone? Tap Open in Authenticator there, or Copy link there and Paste code here.</p>
       {/if}
     </div>
-    {#if pasting || status === "error" || status === "denied"}
+    {#if !inTauri || status === "error" || status === "denied"}
       <div class="field">
         <label for="paste">Paste what the code says</label>
         <input id="paste" class="mono" bind:value={pasted} placeholder={'{"link":"https://api.encedo.com/…","user":…}'} />
         <button class="button small" disabled={!pasted.trim() || app.busy} onclick={() => app.scanned(pasted.trim())}>Use this code</button>
       </div>
     {/if}
+    {#if pasteNote}<p class="eyebrow exposed" role="alert">{pasteNote}</p>{/if}
     <div class="viewfinder">
       <div class="frame"><i></i><i></i><i></i><i></i></div>
       {#if zoom && status === "scanning"}
@@ -94,12 +101,13 @@
   </div>
   <div class="screen-actions row">
     <button class="button plain" onclick={leave}>Cancel</button>
+    <!-- The Manager on this same phone: "Copy link" there, "Paste code" here.
+         The clipboard is read only on this tap. -->
+    <button class="button plain" disabled={app.busy} onclick={paste}>Paste code</button>
     {#if status === "denied"}
       <button class="button" onclick={() => openAppSettings()}>Open settings</button>
     {:else if inTauri && status !== "scanning"}
       <button class="button" onclick={start}>Scan again</button>
-    {:else if inTauri && !pasting}
-      <button class="button plain" onclick={async () => { pasting = true; await cancelScan(); status = "idle"; }}>Paste a code</button>
     {:else if !inTauri}
       <button class="button" onclick={() => app.scanned(JSON.stringify({ link: "https://api.encedo.com/notify/pairing/3f9a…", user: "chris", hostname: "hem-wh.encedo.local", email: "chris@encedo.com" }))}>Simulate a scan</button>
     {/if}

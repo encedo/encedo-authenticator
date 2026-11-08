@@ -6,6 +6,7 @@ pub mod core;
 pub mod diag;
 pub mod legacy;
 pub mod notify;
+pub mod pairlink;
 pub mod scope;
 pub mod store;
 pub mod update;
@@ -139,6 +140,26 @@ fn device_name(app: &tauri::AppHandle) -> String {
     }
 }
 
+/// A pairing link opened while the app runs: keep it, and tell the webview,
+/// which takes it when it can show a pairing (`pair_link_take`). A link that
+/// started the app is read by `pair_link_take` itself.
+#[cfg(mobile)]
+fn watch_pair_links(app: &tauri::AppHandle) {
+    use tauri::Emitter;
+    use tauri_plugin_deep_link::DeepLinkExt;
+    let handle = app.clone();
+    app.deep_link().on_open_url(move |event| {
+        let links = handle.state::<pairlink::PairLinks>();
+        let mut fresh = false;
+        for url in event.urls() {
+            fresh |= links.offer(url.as_str());
+        }
+        if fresh {
+            let _ = handle.emit("pair-link", ());
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -147,7 +168,9 @@ pub fn run() {
         .plugin(tauri_plugin_barcode_scanner::init())
         .plugin(tauri_plugin_encedo_push::init())
         .plugin(tauri_plugin_encedo_keystore::init())
-        .plugin(tauri_plugin_biometric::init());
+        .plugin(tauri_plugin_biometric::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_clipboard_manager::init());
     #[cfg(target_os = "android")]
     let builder = builder.plugin(tauri_plugin_encedo_update::init());
     builder
@@ -174,6 +197,9 @@ pub fn run() {
                 Err(e) => eprintln!("[encedo] storage not open at launch: {e}"),
             }
             app.manage(core);
+            app.manage(pairlink::PairLinks::default());
+            #[cfg(mobile)]
+            watch_pair_links(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -197,6 +223,8 @@ pub fn run() {
             commands::pair_scan,
             commands::pair_confirm,
             commands::pair_refuse,
+            commands::pair_paste,
+            commands::pair_link_take,
             commands::requests_refresh,
             commands::last_refresh,
             commands::diag_log,

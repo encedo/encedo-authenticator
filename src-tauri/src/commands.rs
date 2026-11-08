@@ -224,6 +224,49 @@ pub async fn pair_refuse(core: State<'_, Core>, fid: Option<String>) -> Res<()> 
     map(core.pair_refuse(&fid).await)
 }
 
+/// "Paste code": the clipboard is read here, once, because the person tapped
+/// the button; it is never read otherwise. It may hold the QR JSON ("Copy
+/// link" in the Manager) or an `encedo-auth://pair` link: both parse alike.
+#[tauri::command]
+pub async fn pair_paste(app: tauri::AppHandle, core: State<'_, Core>) -> Res<PairingPreview> {
+    let text = clipboard_text(&app)?;
+    if text.trim().is_empty() {
+        return Err(ErrorView { code: "clipboard".into(), message: "The clipboard is empty. Tap Copy link in the Manager, then Paste code here.".into() });
+    }
+    map(core.pair_scan(&text).await)
+}
+
+#[cfg(mobile)]
+fn clipboard_text(app: &tauri::AppHandle) -> Res<String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    // Both plugins reject an empty clipboard or one holding no plain text.
+    app.clipboard().read_text().map_err(|_| ErrorView { code: "clipboard".into(), message: "The clipboard holds no text. Tap Copy link in the Manager, then Paste code here.".into() })
+}
+
+#[cfg(not(mobile))]
+fn clipboard_text(_app: &tauri::AppHandle) -> Res<String> {
+    Err(ErrorView { code: "clipboard".into(), message: "This build cannot read the clipboard; type the code into the field instead.".into() })
+}
+
+/// The `encedo-auth://pair` link the system opened the app with, once. The
+/// webview asks when it can show a pairing, and hands the link to `pair_scan`.
+#[tauri::command]
+pub fn pair_link_take(app: tauri::AppHandle, links: State<'_, crate::pairlink::PairLinks>) -> Option<String> {
+    #[cfg(mobile)]
+    {
+        use tauri_plugin_deep_link::DeepLinkExt;
+        // The link that started the app may predate the listener.
+        if let Ok(Some(urls)) = app.deep_link().get_current() {
+            for url in urls {
+                links.offer(url.as_str());
+            }
+        }
+    }
+    #[cfg(not(mobile))]
+    let _ = app;
+    links.take()
+}
+
 #[tauri::command]
 pub fn diag_log() -> Vec<String> {
     crate::diag::lines()

@@ -41,6 +41,10 @@ tauri-plugin-barcode-scanner = { path = "plugins/barcode-scanner" }
 tauri-plugin-encedo-push = { path = "plugins/encedo-push" }
 tauri-plugin-encedo-keystore = { path = "plugins/encedo-keystore" }
 tauri-plugin-biometric = "2"
+# encedo-auth://pair?qr=…: the Manager open on this same phone hands its code over.
+tauri-plugin-deep-link = "2"
+# "Paste code" reads the clipboard natively, and only when tapped.
+tauri-plugin-clipboard-manager = "2"
 
 [profile.release]
 codegen-units = 1

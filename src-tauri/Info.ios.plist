@@ -13,6 +13,18 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<!-- encedo-auth://pair?qr=…: the Manager open in a browser on this phone hands its pairing code over. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>encedo-auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>encedo-auth</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

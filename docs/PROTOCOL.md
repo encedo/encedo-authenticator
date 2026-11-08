@@ -31,7 +31,15 @@ trzymamy kolejność z v1, żeby wektory z v1 pasowały bajt w bajt.
 
 ## Przepływ 1: parowanie (`parseQRCode`, `genReply`)
 
-1. QR z kamery: JSON `{link, user, hostname, email}`.
+1. QR z kamery: JSON `{link, user, hostname, email}` (od Managera v2 też `hash`, kolejność kluczy
+   `link, hash, user, email, hostname` — nie zmieniać). **[v2]** Ten sam JSON trafia do aplikacji jeszcze
+   na dwa sposoby, gdy Manager jest otwarty na tym samym telefonie:
+   - „Open in Authenticator”: `encedo-auth://pair?qr=<base64url(UTF-8 JSON), bez paddingu>`
+     (Android: intent-filter `encedo-auth`/`pair`, iOS: `CFBundleURLTypes`; plugin deep-link).
+   - „Copy link” w Managerze kopiuje surowy JSON; „Paste code” w aplikacji czyta schowek tylko po
+     dotknięciu i przyjmuje też wklejony link `encedo-auth://`.
+   Wszystko idzie przez `PairingCode::parse` (`src-tauri/src/notify.rs`). Kod z linku musi mieć `link`
+   i `hash`; zły link (inny host, brak `qr`, uszkodzony base64url) kończy się błędem bez ruchu w sieci.
 2. `GET link` → `{request: <JWT>, ipinfo_eid: {city, country, ip}}`. Payload JWT (bez weryfikacji podpisu,
    aplikacja nie ma jeszcze sekretu): `{jti, exp, iss: eid, aud: epk}` (tak wystawia moduł, potwierdzone
    przykładem z docs.encedo.com 2026-09-09). v1 czytało `eat`, którego nie ma, i `JSON.stringify` gubił

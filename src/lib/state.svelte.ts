@@ -381,6 +381,9 @@ class AppState {
       this.lockError = { code: r.code, message: r.message ?? "Not confirmed." };
     } finally {
       this.unlocking = false;
+      // leaveLock ran while `unlocking` was still set, so its own check of a
+      // waiting pairing link was turned away; ask again now it is cleared.
+      if (this.screen.name !== "lock") void this.checkPairLink();
     }
   }
 

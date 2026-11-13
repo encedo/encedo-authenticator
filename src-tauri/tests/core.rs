@@ -501,6 +501,71 @@ async fn allow_with_the_lock_off_says_none() {
     assert!(actx.get("uva").is_none(), "{actx}");
 }
 
+/// An event for this phone whose request carries `ctx` (DEV-511), served by the broker.
+fn serve_event_with_ctx(f: &Fixture, aid: &str, ctx: &str) {
+    let mut event = f.hem.event(aid, JTI, "keymgmt:list", now() + 300).expect("event");
+    event.ctx = Some(ctx.into());
+    f.broker.on("POST", "/allbypid", 200, &format!(r#"{{"eventid":{{"ev1":["{PID}"]}}}}"#));
+    f.broker.on("GET", EVENT, 200, &serde_json::to_string(&event).expect("event json"));
+    f.broker.on("POST", EVENT, 200, "{}");
+}
+
+/// DEV-511: without a confirmation for this Allow, `uvm` is `none`.
+#[tokio::test]
+async fn allow_without_a_prompt_says_uvm_none() {
+    let f = Fixture::new().await;
+    let aid = f.pending_event("keymgmt:list", now() + 300).await;
+    f.broker.on("POST", EVENT, 200, "{}");
+    f.core.user_verified(true);
+    f.core.refresh().await.expect("refresh");
+    f.core.allow("ev1", PERIODS[0], false).await.expect("allow");
+    let actx = f.hem.check_allow(&aid, JTI, &f.broker.last("POST", EVENT).json()).expect("grant").actx.expect("actx");
+    assert_eq!(actx["uvm"], "none");
+}
+
+/// DEV-511: `uv=bio` refuses an Allow confirmed with the PIN, or not at all;
+/// nothing is sent and the request stays open. Biometrics then pass, and the
+/// answer says so.
+#[tokio::test]
+async fn ctx_uv_bio_needs_biometrics_for_this_allow() {
+    let f = Fixture::new().await;
+    let aid = f.pair().await;
+    serve_event_with_ctx(&f, &aid, "oidc;uv=bio");
+    let shown = f.core.refresh().await.expect("refresh");
+    assert_eq!(shown[0].uv, Some("bio"));
+    assert_eq!(f.field(&f.latest("request.shown"), "Asks for"), "biometrics for Allow");
+
+    let e = view(f.core.allow("ev1", PERIODS[0], false).await.expect_err("no confirmation"));
+    assert_eq!(e.code, "verification");
+    f.core.approval_verified("ev1", encedo_protocol::event::Uv::Pin);
+    let e = view(f.core.allow("ev1", PERIODS[0], false).await.expect_err("PIN is not enough"));
+    assert_eq!(e.code, "verification");
+    assert!(e.message.contains("fingerprint"), "{}", e.message);
+    assert_eq!(f.broker.count("POST", EVENT), 0, "nothing may be sent");
+
+    f.core.approval_verified("ev1", encedo_protocol::event::Uv::Bio);
+    f.core.allow("ev1", PERIODS[0], false).await.expect("allow with biometrics");
+    let actx = f.hem.check_allow(&aid, JTI, &f.broker.last("POST", EVENT).json()).expect("grant").actx.expect("actx");
+    assert_eq!(actx["uvm"], "bio");
+    assert!(actx.to_string().len() <= 128, "{actx}");
+}
+
+/// DEV-511: `uv=pin` takes either a PIN or biometrics, but not nothing; a
+/// confirmation given for another request does not count.
+#[tokio::test]
+async fn ctx_uv_pin_takes_a_pin_but_not_nothing() {
+    let f = Fixture::new().await;
+    let aid = f.pair().await;
+    serve_event_with_ctx(&f, &aid, "uv=pin");
+    assert_eq!(f.core.refresh().await.expect("refresh")[0].uv, Some("pin"));
+    f.core.approval_verified("ev-other", encedo_protocol::event::Uv::Bio);
+    assert_eq!(view(f.core.allow("ev1", PERIODS[0], false).await.expect_err("nothing")).code, "verification");
+    f.core.approval_verified("ev1", encedo_protocol::event::Uv::Pin);
+    f.core.allow("ev1", PERIODS[0], false).await.expect("allow with the PIN");
+    let actx = f.hem.check_allow(&aid, JTI, &f.broker.last("POST", EVENT).json()).expect("grant").actx.expect("actx");
+    assert_eq!(actx["uvm"], "pin");
+}
+
 /// DEV-512 / DEV-513: the broker's note reaches the screen as one plain line.
 #[tokio::test]
 async fn the_request_shows_the_note_as_plain_text() {

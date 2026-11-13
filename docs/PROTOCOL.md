@@ -67,6 +67,11 @@ zdarzenia. Jedno zdarzenie naraz (`_eventBeingHandled`).
 2. Dla pierwszego zdarzenia: `GET /notify/event/data/{eventId}/{pidx}` →
    `{jti, scope, epk, exp, ipinfo_eid: {city, country, ip}}`. **[DEV-512/513]** Opcjonalnie `note`: tekst
    z `ext/request` (1-128 znaków), jawny i niezweryfikowany; ekran żądania pokazuje go jako jedną linię.
+   **[DEV-511]** Opcjonalnie `ctx` z `ext/request` (1-64 znaki), tą samą drogą co `note` (broker musi je
+   przekazać, jak `note` w DEV-513): elementy `klucz=wartość` po `;`, nieznane pomijane. `uv=bio`: Allow
+   wymaga biometrii w tym zatwierdzeniu (monit bez PIN-u urządzenia); `uv=pin`: wystarczy PIN albo
+   biometria. Niespełnione wymaganie: nic nie idzie, żądanie zostaje na ekranie; bez biometrii na
+   telefonie przy `uv=bio` Allow nie jest możliwe (zostaje Deny). Sprawdza to rdzeń przed odpowiedzią.
 3. Wygaśnięcie: jeśli `now > exp`, `DELETE` zdarzenia, wpis w archiwum, następne. **[v2]** sprawdzać przed
    pokazaniem ekranu; w v1 ta gałąź odwołuje się do niezdefiniowanych zmiennych i wywala się cicho.
 4. Dekrypcja scope:
@@ -97,7 +102,10 @@ zdarzenia. Jedno zdarzenie naraz (`_eventBeingHandled`).
    ```
    Odmowa: `DELETE /notify/event/data/{eventId}/{pidx}`.
    **[DEV-512]** v2 dokłada do claimów `actx` (kontekst logowania, ≤ 128 B, pod MAC-iem JWT):
-   `{"v":1,"lock":"bio+pin"|"pin"|"none","uva":<s>,"aos":"android"|"ios","app":"<wersja>+<commit>","hw":"sb"|"tee"|"sw"|"kc"}`.
+   `{"v":1,"lock":"bio+pin"|"pin"|"none","uva":<s>,"aos":"android"|"ios","app":"<wersja>+<commit>","hw":"sb"|"tee"|"sw"|"kc","uvm":"bio"|"pin"|"none"}`.
+   **[DEV-511]** `uvm`: czym potwierdzono to jedno zatwierdzenie (`bio` = monit tylko z biometrią, `pin` =
+   monit, który przyjmuje też PIN, `none` = bez monitu). `uva` mówi o ostatnim odblokowaniu aplikacji.
+   `app` ma najwyżej 32 znaki, `uva` najwyżej `u32::MAX`, więc najdłuższy `actx` ma 121 B.
    FW 1.3 (DEV-511) kopiuje go 1:1 do tokenu HEM i do bloku `auth` atestacji klucza. Bez `actx` odpowiedź
    jest bajt w bajt taka jak w v1 (wektory w `tests/vectors.rs`).
 8. Po odpowiedzi zdarzenie trafia do lokalnej tabeli obsłużonych i następuje kolejne odpytanie.

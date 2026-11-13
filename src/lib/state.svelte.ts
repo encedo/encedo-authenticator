@@ -364,8 +364,8 @@ class AppState {
 
   /** Ask the system who is there. On success the core is told, and the login
    *  context of the next answer is dated from now (DEV-512). */
-  private async confirmPerson(reason: string) {
-    const r = await biometricAuth(reason);
+  private async confirmPerson(reason: string, biometricOnly = false) {
+    const r = await biometricAuth(reason, biometricOnly);
     if (r.ok && inTauri) {
       const bio = await biometricStatus();
       await api.userVerified(bio.available).catch(() => {});
@@ -517,15 +517,33 @@ class AppState {
       return;
     }
     this.allowNote = null;
-    // DEV-512: "confirm every Allow" asks before anything is sent; refused, the
-    // request stays on screen and nothing leaves the phone.
-    if (allow && this.settings.biometric_lock && this.settings.confirm_each_allow) {
-      this.unlocking = true; // the prompt pauses the activity; do not treat the return as "came back"
-      try {
-        const r = await this.confirmPerson("Confirm to allow");
-        if (!r.ok) { this.allowNote = r.message ?? "Not confirmed, so nothing was sent."; return; }
-      } finally {
-        this.unlocking = false;
+    // DEV-512 / DEV-511: a confirmation for this Allow, asked before anything
+    // is sent, when the requester demands one (`uv` in `ctx`) or "confirm every
+    // Allow" is on. Biometrics only when it is demanded, or when the person
+    // chose to confirm every Allow on a phone that has them. Refused, the
+    // request stays on screen and nothing leaves the phone; the core checks the
+    // demand again before it answers.
+    if (allow) {
+      const wanted = req.uv ?? null;
+      const confirmEach = this.settings.biometric_lock && this.settings.confirm_each_allow;
+      let method: "bio" | "pin" | null = null;
+      if (wanted || confirmEach) {
+        const bio = await biometricStatus();
+        if (wanted === "bio" && !bio.available) {
+          this.allowNote = "This request needs your fingerprint or face, and none is set up on this phone, so it cannot be allowed here. Deny it, or set up biometrics and ask again.";
+          return;
+        }
+        method = wanted === "bio" || (confirmEach && bio.available) ? "bio" : "pin";
+      }
+      if (method) {
+        this.unlocking = true; // the prompt pauses the activity; do not treat the return as "came back"
+        try {
+          const r = await this.confirmPerson(method === "bio" ? "Confirm to allow with your fingerprint or face" : "Confirm to allow", method === "bio");
+          if (!r.ok) { this.allowNote = r.message ?? "Not confirmed, so nothing was sent."; return; }
+          await api.approvalVerified(id, method);
+        } finally {
+          this.unlocking = false;
+        }
       }
     }
     this.busy = true;
@@ -537,6 +555,8 @@ class AppState {
       void this.loadHealth();
       this.screen = { name: "result", outcome: a.outcome, title: a.title, detail: a.detail };
     } catch (e) {
+      // DEV-511: the demand of `ctx` was not met; nothing was sent, the request stays.
+      if (e instanceof ApiError && e.code === "verification") { this.allowNote = e.message; return; }
       this.pending = this.pending.filter((r) => r.id !== id);
       this.fail(e);
     } finally {

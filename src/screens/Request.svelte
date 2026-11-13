@@ -48,6 +48,10 @@
             <!-- DEV-512: the requester's own words, plain text, not verified -->
             <div class="wide"><dt>Says it is for</dt><dd class="truncate">{req.note}</dd></div>
           {/if}
+          {#if req.uv}
+            <!-- DEV-511: what the requester demands for Allow (ctx) -->
+            <div class="wide"><dt>Allow needs</dt><dd>{req.uv === "bio" ? "Your fingerprint or face, not the PIN" : "Your confirmation on this phone"}</dd></div>
+          {/if}
           <div><dt>Module</dt><dd>{req.module_label || shortPid(req.pid)}</dd></div>
           <div><dt>Host</dt><dd class="mono">{req.host}</dd></div>
           {#each req.details as d}

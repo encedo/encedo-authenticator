@@ -31,6 +31,60 @@ pub struct Event {
     /// chars), passed on by the broker as plain text: shown, never trusted (DEV-512).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The requester's demands (`ctx` of `ext/request`, 1-64 chars): `key=value`
+    /// items separated by `;`, passed on by the broker like `note`. Read by the
+    /// app (`uv=bio`, `uv=pin`, DEV-511); not verified by anything here, which is
+    /// why the answer says what was actually done (`actx.uvm`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ctx: Option<String>,
+}
+
+/// How the person confirmed one approval, or what a requester demands for it
+/// (`uv` in `ctx`, `uvm` in `actx`). Ordered: `Bio` satisfies `Pin`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Uv {
+    None,
+    /// The device PIN, pattern or password (or biometrics: the system prompt
+    /// that allows both does not say which one was used).
+    Pin,
+    /// Biometrics only, the device credential not accepted.
+    Bio,
+}
+
+impl Uv {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Uv::None => "none",
+            Uv::Pin => "pin",
+            Uv::Bio => "bio",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Uv> {
+        match s {
+            "none" => Some(Uv::None),
+            "pin" => Some(Uv::Pin),
+            "bio" => Some(Uv::Bio),
+            _ => None,
+        }
+    }
+
+    /// What `ctx` demands of the approval: the strongest `uv=` item, or none.
+    /// Items are `key=value` separated by `;`; anything not understood
+    /// (other keys, other values, bare words like `oidc`) is ignored.
+    pub fn wanted(ctx: Option<&str>) -> Uv {
+        ctx.unwrap_or_default()
+            .split(';')
+            .filter_map(|item| item.split_once('='))
+            .filter(|(k, _)| k.trim() == "uv")
+            .filter_map(|(_, v)| match v.trim() {
+                "bio" => Some(Uv::Bio),
+                "pin" => Some(Uv::Pin),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(Uv::None)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default)]
@@ -124,6 +178,10 @@ pub struct Actx {
     /// Where the storage wrapping key is: `sb`, `tee`, `sw` or `kc`; absent when unknown.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hw: Option<&'static str>,
+    /// How the person confirmed this one approval: `bio`, `pin` or `none`
+    /// (DEV-511). `uva` says when the app was last unlocked; this says what
+    /// happened for the answer itself.
+    pub uvm: &'static str,
 }
 
 /// The longest `actx` the HEM copies (serialized, FW `AUTH_ACTX_MAX`); a longer

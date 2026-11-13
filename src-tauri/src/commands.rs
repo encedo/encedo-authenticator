@@ -120,6 +120,15 @@ pub fn user_verified(core: State<'_, Core>, biometrics: bool) {
     core.user_verified(biometrics);
 }
 
+/// DEV-511: the person confirmed the Allow of request `id`: `bio` when the
+/// prompt took biometrics only, `pin` when it also took the device PIN.
+#[tauri::command]
+pub fn approval_verified(core: State<'_, Core>, id: String, method: String) -> Res<()> {
+    let uv = encedo_protocol::event::Uv::parse(&method).ok_or_else(|| ErrorView { code: "state".into(), message: format!("not a verification method: {method}") })?;
+    core.approval_verified(&id, uv);
+    Ok(())
+}
+
 /// Going to the background: write out what the commentary has collected.
 #[tauri::command]
 pub fn log_flush(core: State<'_, Core>) -> Res<()> {

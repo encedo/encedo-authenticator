@@ -142,6 +142,7 @@ impl Hem {
             exp,
             ipinfo_eid: Some(Self::ipinfo()),
             note: None,
+            ctx: None,
         })
     }
 
@@ -178,7 +179,7 @@ impl Hem {
         let sealed = p.get("scope").and_then(Value::as_str).ok_or(Error::MalformedField("allow", "scope"))?;
         // The granted scope travels sealed under the same session key; opening it
         // needs no expiry check, so pass an event that cannot be expired.
-        let holder = Event { jti: jti.to_string(), scope: sealed.to_string(), epk: String::new(), exp: u64::MAX, ipinfo_eid: None, note: None };
+        let holder = Event { jti: jti.to_string(), scope: sealed.to_string(), epk: String::new(), exp: u64::MAX, ipinfo_eid: None, note: None, ctx: None };
         let scope = open_scope(&holder, &self.keys, &aid, 0)?.scope;
         Ok(Granted {
             scope,
@@ -294,23 +295,44 @@ mod tests {
         let ev = hem.event(&aid, "amNRPXl5", "keymgmt:use:2ba3", 2_000_000_000).unwrap();
         let opened = open_scope(&ev, &phone, &eid, 1_000).unwrap();
 
-        let actx = Actx { v: 1, lock: "bio+pin", uva: Some(12), aos: "android", app: "2.0.0-dev.15+9bad376".into(), hw: Some("sb") };
+        let actx = Actx { v: 1, lock: "bio+pin", uva: Some(12), aos: "android", app: "2.0.0-dev.15+9bad376".into(), hw: Some("sb"), uvm: "bio" };
         let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, false, 1_000, PERIODS[0], Some(&actx)).unwrap();
         let granted = hem.check_allow(&aid, "amNRPXl5", &serde_json::to_value(&reply).unwrap()).unwrap();
-        let expected = json!({ "v": 1, "lock": "bio+pin", "uva": 12, "aos": "android", "app": "2.0.0-dev.15+9bad376", "hw": "sb" });
+        let expected = json!({ "v": 1, "lock": "bio+pin", "uva": 12, "aos": "android", "app": "2.0.0-dev.15+9bad376", "hw": "sb", "uvm": "bio" });
         assert_eq!(granted.actx, Some(expected.clone()));
         // the order the app writes is the order the module copies
         assert_eq!(serde_json::to_string(&actx).unwrap(), expected.to_string());
 
         // lock none: no uva; unknown key level: no hw
-        let none = Actx { v: 1, lock: "none", uva: None, aos: "ios", app: "2.0.0+abc1234".into(), hw: None };
+        let none = Actx { v: 1, lock: "none", uva: None, aos: "ios", app: "2.0.0+abc1234".into(), hw: None, uvm: "none" };
         let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, false, 1_000, PERIODS[0], Some(&none)).unwrap();
         let granted = hem.check_allow(&aid, "amNRPXl5", &serde_json::to_value(&reply).unwrap()).unwrap();
-        assert_eq!(granted.actx, Some(json!({ "v": 1, "lock": "none", "aos": "ios", "app": "2.0.0+abc1234" })));
+        assert_eq!(granted.actx, Some(json!({ "v": 1, "lock": "none", "aos": "ios", "app": "2.0.0+abc1234", "uvm": "none" })));
+
+        // the longest context the app can write (app label at most 32 chars,
+        // uva capped at u32::MAX) still fits what the HEM copies
+        let widest = Actx { v: 1, lock: "bio+pin", uva: Some(u32::MAX.into()), aos: "android", app: "x".repeat(32), hw: Some("tee"), uvm: "none" };
+        let n = serde_json::to_string(&widest).unwrap().len();
+        assert!(n <= ACTX_MAX, "{n}");
 
         // what the HEM would drop silently is refused here
         let long = Actx { app: "x".repeat(ACTX_MAX), ..actx };
         assert_eq!(allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, false, 1_000, PERIODS[0], Some(&long)).unwrap_err(), Error::Malformed("actx size"));
+    }
+
+    /// DEV-511: what `ctx` demands; the strongest `uv=` wins, the rest is ignored.
+    #[test]
+    fn ctx_says_which_verification_is_wanted() {
+        use crate::event::Uv;
+        assert_eq!(Uv::wanted(None), Uv::None);
+        assert_eq!(Uv::wanted(Some("oidc")), Uv::None);
+        assert_eq!(Uv::wanted(Some("uv=bio")), Uv::Bio);
+        assert_eq!(Uv::wanted(Some("oidc;uv=pin")), Uv::Pin);
+        assert_eq!(Uv::wanted(Some(" oidc ; uv = bio ; x=y")), Uv::Bio);
+        assert_eq!(Uv::wanted(Some("uv=pin;uv=bio")), Uv::Bio);
+        assert_eq!(Uv::wanted(Some("uv=face;uvx=bio;=bio")), Uv::None);
+        let with: Event = serde_json::from_value(json!({ "jti": "j", "scope": "A", "epk": "e", "exp": 1, "ctx": "oidc;uv=bio" })).unwrap();
+        assert_eq!(Uv::wanted(with.ctx.as_deref()), Uv::Bio);
     }
 
     /// DEV-512 / DEV-513: the broker's `note` is optional; old and new broker replies both parse.

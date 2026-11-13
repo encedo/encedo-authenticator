@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use encedo_protocol::codec::{b64, b64_decode_32};
-use encedo_protocol::event::{self, Actx, Event, IpInfo};
+use encedo_protocol::event::{self, Actx, Event, IpInfo, Uv};
 use encedo_protocol::keys::KeyPair;
 use encedo_protocol::pairing::{self, PairingRequest};
 use encedo_protocol::unpair;
@@ -46,6 +46,10 @@ pub enum CoreError {
     /// nobody has confirmed. Every read and write says this until it is open.
     #[error("this phone's storage is not open yet")]
     Locked,
+    /// DEV-511: the requester demanded a verification (`uv` in `ctx`) this
+    /// approval did not have. Nothing was sent; the request stays open.
+    #[error("{0}")]
+    Verification(String),
 }
 
 /// What the webview gets on error: a stable code and a sentence.
@@ -70,6 +74,7 @@ impl ErrorView {
             CoreError::Protocol(encedo_protocol::Error::Expired) => "expired".into(),
             CoreError::Protocol(_) => "protocol".into(),
             CoreError::State(_) => "state".into(),
+            CoreError::Verification(_) => "verification".into(),
         };
         ErrorView { code, message: e.to_string() }
     }
@@ -132,6 +137,9 @@ pub struct RequestView {
     /// What the requester says the access is for, from the broker (DEV-512):
     /// plain text, one line, 128 chars at most. Not verified by anything.
     pub note: Option<String>,
+    /// DEV-511: what the requester demands for an Allow, from `ctx`: `bio`
+    /// (biometrics, no PIN instead) or `pin` (either); absent when nothing.
+    pub uv: Option<&'static str>,
     #[serde(flatten)]
     pub view: ScopeView,
 }
@@ -293,13 +301,20 @@ pub struct Core {
     /// monotonic clock, so setting the phone's time changes nothing. Not stored:
     /// a new run has seen nobody yet.
     verified: Mutex<Option<(Instant, bool)>>,
+    /// DEV-511: how the person confirmed the Allow of one request, by event id,
+    /// reported right after the prompt. Taken by that Allow; not stored.
+    approvals: Mutex<HashMap<String, (Instant, Uv)>>,
     /// The build as the login context names it, `2.0.0-dev.15+9bad376`.
     app_label: Mutex<String>,
 }
 
 /// The longest `app` value put into the login context, so `actx` stays within
-/// what the HEM copies (128 B).
-const APP_LABEL_MAX: usize = 40;
+/// what the HEM copies (128 B): with `uvm` the longest context is 121 B.
+const APP_LABEL_MAX: usize = 32;
+
+/// How long a confirmation given for one Allow counts: the prompt and the
+/// answer are one tap apart, so a minute is generous.
+const APPROVAL_FRESH_SECS: u64 = 60;
 
 /// `aos` of the login context.
 fn aos() -> &'static str {
@@ -309,6 +324,14 @@ fn aos() -> &'static str {
         "ios"
     } else {
         std::env::consts::OS
+    }
+}
+
+/// DEV-511: what `ctx` demands of an Allow, for the screen and the journal.
+fn wanted_of(event: &Event) -> Option<&'static str> {
+    match Uv::wanted(event.ctx.as_deref()) {
+        Uv::None => None,
+        uv => Some(uv.as_str()),
     }
 }
 
@@ -333,6 +356,7 @@ impl Core {
             last_refresh: Mutex::new(RefreshReport::default()),
             pending_trace: Mutex::new(Vec::new()),
             verified: Mutex::new(None),
+            approvals: Mutex::new(HashMap::new()),
             app_label: Mutex::new(String::new()),
         }
     }
@@ -342,6 +366,24 @@ impl Core {
     pub fn user_verified(&self, biometrics: bool) {
         if let Ok(mut v) = self.verified.lock() {
             *v = Some((Instant::now(), biometrics));
+        }
+    }
+
+    /// DEV-511: the person confirmed the Allow of request `id`, with
+    /// biometrics only (`Bio`) or with a prompt that also takes the device
+    /// PIN (`Pin`). The next `allow(id)` takes it.
+    pub fn approval_verified(&self, id: &str, uv: Uv) {
+        if let Ok(mut a) = self.approvals.lock() {
+            a.retain(|_, (at, _)| at.elapsed().as_secs() <= APPROVAL_FRESH_SECS);
+            a.insert(id.to_string(), (Instant::now(), uv));
+        }
+    }
+
+    fn take_approval(&self, id: &str) -> Uv {
+        let Ok(mut a) = self.approvals.lock() else { return Uv::None };
+        match a.remove(id) {
+            Some((at, uv)) if at.elapsed().as_secs() <= APPROVAL_FRESH_SECS => uv,
+            _ => Uv::None,
         }
     }
 
@@ -355,13 +397,13 @@ impl Core {
     /// DEV-512: the login context of an answer. `lock` says what unlocks the
     /// app and `uva` how long ago that happened; with the lock off, or before
     /// anyone confirmed in this run, the context says `none` and has no `uva`.
-    pub fn actx(&self, settings: &Settings) -> Actx {
+    pub fn actx(&self, settings: &Settings, uvm: Uv) -> Actx {
         let verified = self.verified.lock().ok().and_then(|v| *v);
         let (lock, uva) = match (settings.biometric_lock, verified) {
-            (true, Some((at, biometrics))) => (if biometrics { "bio+pin" } else { "pin" }, Some(at.elapsed().as_secs())),
+            (true, Some((at, biometrics))) => (if biometrics { "bio+pin" } else { "pin" }, Some(at.elapsed().as_secs().min(u32::MAX.into()))),
             _ => ("none", None),
         };
-        Actx { v: 1, lock, uva, aos: aos(), app: self.app_label(), hw: self.secrets.protection().level.map(KeyLevel::as_str) }
+        Actx { v: 1, lock, uva, aos: aos(), app: self.app_label(), hw: self.secrets.protection().level.map(KeyLevel::as_str), uvm: uvm.as_str() }
     }
 
     /// Open the storage. Fails with [`StoreError::AuthRequired`] when the key is
@@ -923,6 +965,9 @@ impl Core {
         if let Some(note) = note_of(&event) {
             shown = shown.field("Note", note); // DEV-512
         }
+        if let Some(uv) = wanted_of(&event) {
+            shown = shown.field("Asks for", if uv == "bio" { "biometrics for Allow" } else { "a confirmation for Allow" }); // DEV-511
+        }
         self.record(shown)?;
         let live = LiveRequest { pid: pid.into(), event, scope: opened.scope, view };
         let v = self.view_of(event_id, &live);
@@ -932,7 +977,7 @@ impl Core {
 
     fn view_of(&self, id: &str, r: &LiveRequest) -> RequestView {
         let (label, host) = self.with_store(|s| Ok(s.data.module(&r.pid).map(|m| (m.label.clone(), m.host.clone())))).ok().flatten().unwrap_or_default();
-        RequestView { id: id.into(), pid: r.pid.clone(), module_label: label, host, scope: r.scope.clone(), exp: r.event.exp, issuer: r.event.ipinfo_eid.clone(), note: note_of(&r.event), view: r.view.clone() }
+        RequestView { id: id.into(), pid: r.pid.clone(), module_label: label, host, scope: r.scope.clone(), exp: r.event.exp, issuer: r.event.ipinfo_eid.clone(), note: note_of(&r.event), uv: wanted_of(&r.event), view: r.view.clone() }
     }
 
     /// This request will never be shown: remember it as handled and say why.
@@ -946,12 +991,27 @@ impl Core {
     }
 
     pub async fn allow(&self, id: &str, period_secs: u64, writable: bool) -> Result<AnswerView, CoreError> {
+        // DEV-511: what the requester demands is checked before the request is
+        // taken, so a refusal leaves it on screen and nothing is sent.
+        let uvm = self.take_approval(id);
+        let wanted = {
+            let live = self.live.lock().map_err(|_| CoreError::State("live poisoned".into()))?;
+            let r = live.get(id).ok_or_else(|| CoreError::State("request no longer open".into()))?;
+            Uv::wanted(r.event.ctx.as_deref())
+        };
+        if uvm < wanted {
+            self.note(format!("allow {}: ctx wants {} but the approval had {}", brief(id, 6), wanted.as_str(), uvm.as_str()));
+            return Err(CoreError::Verification(match wanted {
+                Uv::Bio => "This request needs your fingerprint or face for Allow; the device PIN does not count. Nothing was sent.".into(),
+                _ => "This request needs you to confirm Allow on this phone. Nothing was sent.".into(),
+            }));
+        }
         let r = self.take_live(id)?;
         let writable = writable && r.view.ask_writable;
         let module = self.with_store(|s| Ok(s.data.module(&r.pid).cloned()))?.ok_or_else(|| CoreError::State("module gone".into()))?;
         let app = KeyPair::from_secret(b64_decode_32(&module.aid_prv).ok_or(CoreError::State("bad aid_prv".into()))?);
         let period = if event::PERIODS.contains(&period_secs) { period_secs } else { event::PERIODS[0] };
-        let actx = self.actx(&self.settings()?); // DEV-512
+        let actx = self.actx(&self.settings()?, uvm); // DEV-512, uvm DEV-511
         let reply = event::allow(&r.event, &app, &module.eid, &module.pid, &r.scope, writable, now(), period, Some(&actx))?;
         let detail = format!("{} · {}", reply.scope, period_label(period));
         let result = self.client.allow(id, &r.pid, &reply).await;

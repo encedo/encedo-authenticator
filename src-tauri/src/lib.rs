@@ -222,6 +222,7 @@ pub fn run() {
             commands::log_push,
             commands::log_app,
             commands::user_verified,
+            commands::approval_verified,
             commands::log_flush,
             commands::pair_scan,
             commands::pair_confirm,

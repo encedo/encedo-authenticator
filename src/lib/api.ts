@@ -11,6 +11,8 @@ export interface RequestView {
   id: string; pid: string; module_label: string; host: string; scope: string; exp: number; issuer: IpInfo | null;
   /** What the requester says the access is for (DEV-512): plain text from the broker, unverified. */
   note: string | null;
+  /** What the requester demands for Allow (DEV-511, `uv` in `ctx`): biometrics only, or any confirmation. */
+  uv?: "bio" | "pin" | null;
   kind: string; title: string; phrase: string; details: Detail[]; ask_period: boolean; ask_writable: boolean; writable_default: boolean; known: boolean;
 }
 export type Outcome = "granted" | "denied" | "expired" | "cancelled" | "rejected" | "error" | "paired" | "unpaired";
@@ -104,6 +106,8 @@ export const api = {
   logApp: (kind: string, title: string, summary: string) => call<void>("log_app", { kind, title, summary }),
   /** DEV-512: the person has just confirmed who they are; `biometrics` = enrolled on this phone. */
   userVerified: (biometrics: boolean) => call<void>("user_verified", { biometrics }),
+  /** DEV-511: how the Allow of this request was confirmed; the core checks it against `ctx` and puts it into `actx.uvm`. */
+  approvalVerified: (id: string, method: "bio" | "pin") => call<void>("approval_verified", { id, method }),
   /** Going to the background: write out what the commentary has collected. */
   logFlush: () => call<void>("log_flush"),
   /** A scanned code, a pasted one, or an `encedo-auth://pair?qr=…` link: one parser. */

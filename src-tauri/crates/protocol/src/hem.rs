@@ -32,6 +32,8 @@ pub struct Granted {
     pub exp: u64,
     /// `actx` as the HEM copies it, 1:1 (DEV-511 / DEV-512).
     pub actx: Option<Value>,
+    /// `ctx` of the authreply, which FW 1.3 writes into the token (DEV-511).
+    pub ctx: Option<String>,
 }
 
 /// A module with its long-term key (`eid`) and the broker's ephemeral key
@@ -187,6 +189,7 @@ impl Hem {
             iat: p.get("iat").and_then(Value::as_u64).unwrap_or_default(),
             exp: p.get("exp").and_then(Value::as_u64).unwrap_or_default(),
             actx: p.get("actx").cloned(),
+            ctx: p.get("ctx").and_then(|c| c.as_str()).map(str::to_string),
         })
     }
 
@@ -258,7 +261,7 @@ mod tests {
         let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, true, 1_000, PERIODS[1], None).unwrap();
         let body = serde_json::to_value(&reply).unwrap();
         let granted = hem.check_allow(&aid, "amNRPXl5", &body).unwrap();
-        assert_eq!(granted, Granted { scope: "storage:disk:home:rw".into(), pid: "pid-1".into(), iat: 1_000, exp: 1_000 + PERIODS[1], actx: None });
+        assert_eq!(granted, Granted { scope: "storage:disk:home:rw".into(), pid: "pid-1".into(), iat: 1_000, exp: 1_000 + PERIODS[1], actx: None, ctx: None });
     }
 
     /// FW 1.3.x multi-scope: `:rw` lands on the drive value, not at the end of the list.
@@ -318,6 +321,24 @@ mod tests {
         // what the HEM would drop silently is refused here
         let long = Actx { app: "x".repeat(ACTX_MAX), ..actx };
         assert_eq!(allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, false, 1_000, PERIODS[0], Some(&long)).unwrap_err(), Error::Malformed("actx size"));
+    }
+
+    /// DEV-511: the request's `ctx` goes back in the authreply exactly as it
+    /// came, so the HEM can put it into the token; too long or empty, it is left out.
+    #[test]
+    fn allow_echoes_ctx() {
+        let hem = Hem::with_seeds(7, 9);
+        let phone = KeyPair::from_secret([3u8; 32]);
+        let aid = b64(&phone.public_bytes());
+        let eid = b64_decode_32(&hem.eid()).unwrap();
+        let mut ev = hem.event(&aid, "amNRPXl5", "keymgmt:list", 2_000_000_000).unwrap();
+        let opened = open_scope(&ev, &phone, &eid, 1_000).unwrap();
+        for (ctx, back) in [(Some("oidc;uv=bio".to_string()), Some("oidc;uv=bio")), (Some("x".repeat(65)), None), (Some(String::new()), None), (None, None)] {
+            ev.ctx = ctx;
+            let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, false, 1_000, PERIODS[0], None).unwrap();
+            let granted = hem.check_allow(&aid, "amNRPXl5", &serde_json::to_value(&reply).unwrap()).unwrap();
+            assert_eq!(granted.ctx.as_deref(), back);
+        }
     }
 
     /// DEV-511: what `ctx` demands; the strongest `uv=` wins, the rest is ignored.

@@ -545,7 +545,10 @@ async fn ctx_uv_bio_needs_biometrics_for_this_allow() {
 
     f.core.approval_verified("ev1", encedo_protocol::event::Uv::Bio);
     f.core.allow("ev1", PERIODS[0], false).await.expect("allow with biometrics");
-    let actx = f.hem.check_allow(&aid, JTI, &f.broker.last("POST", EVENT).json()).expect("grant").actx.expect("actx");
+    let granted = f.hem.check_allow(&aid, JTI, &f.broker.last("POST", EVENT).json()).expect("grant");
+    // the demand goes back as it came, for the HEM to put into the token
+    assert_eq!(granted.ctx.as_deref(), Some("oidc;uv=bio"));
+    let actx = granted.actx.expect("actx");
     assert_eq!(actx["uvm"], "bio");
     assert!(actx.to_string().len() <= 128, "{actx}");
 }

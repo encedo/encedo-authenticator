@@ -197,9 +197,16 @@ struct AllowClaims<'a> {
     pid: &'a str,
     iss: String,
     scope: String,
+    /// The request's `ctx`, echoed as received (DEV-511): FW 1.3 takes the
+    /// token's `ctx` from the authreply, not from the request it no longer has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ctx: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     actx: Option<&'a Actx>,
 }
+
+/// The longest `ctx` the HEM takes (`ext/request` and `ext/token`).
+pub const CTX_MAX: usize = 64;
 
 /// Body of `POST /notify/event/data/{event}/{pidx}`.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -241,6 +248,8 @@ pub fn allow(event: &Event, app: &KeyPair, eid_b64: &str, pid: &str, scope: &str
         pid,
         iss: b64(&app.public_bytes()),
         scope: session.seal(&granted),
+        // 1..64 as the HEM requires; anything else would be dropped there, so it is not sent
+        ctx: event.ctx.as_deref().filter(|c| !c.is_empty() && c.len() <= CTX_MAX),
         actx,
     };
     let jwt = sign_hs256(&claims, &session.s1);

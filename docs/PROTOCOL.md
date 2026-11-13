@@ -72,6 +72,8 @@ zdarzenia. Jedno zdarzenie naraz (`_eventBeingHandled`).
    wymaga biometrii w tym zatwierdzeniu (monit bez PIN-u urządzenia); `uv=pin`: wystarczy PIN albo
    biometria. Niespełnione wymaganie: nic nie idzie, żądanie zostaje na ekranie; bez biometrii na
    telefonie przy `uv=bio` Allow nie jest możliwe (zostaje Deny). Sprawdza to rdzeń przed odpowiedzią.
+   Odpowiedź Allow odsyła ten sam `ctx` w claimach (1-64 znaki, inaczej pomijany): FW 1.3 bierze `ctx`
+   tokenu z authreply, bo żądania już nie pamięta, i nie porównuje go z żądaniem.
 3. Wygaśnięcie: jeśli `now > exp`, `DELETE` zdarzenia, wpis w archiwum, następne. **[v2]** sprawdzać przed
    pokazaniem ekranu; w v1 ta gałąź odwołuje się do niezdefiniowanych zmiennych i wywala się cicho.
 4. Dekrypcja scope:

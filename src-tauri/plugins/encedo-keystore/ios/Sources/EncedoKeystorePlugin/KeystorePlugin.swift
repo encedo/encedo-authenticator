@@ -159,12 +159,20 @@ class KeystorePlugin: Plugin {
 
   /// What this phone can protect a key with. `windowSeconds` is zero because iOS
   /// asks on every use instead of opening a window after one confirmation.
+  /// `strongBox` is false: the wrapping key is a keychain item, not a key made in
+  /// the Secure Enclave (DEV-512: it said "has biometrics" before).
   @objc public func protection(_ invoke: Invoke) throws {
     invoke.resolve([
       "credential": hasCredential(),
-      "strongBox": LAContext().biometryType != .none,
+      "strongBox": false,
       "windowSeconds": 0,
     ])
+  }
+
+  /// DEV-512: where the wrapping key lives, for the login context: a keychain
+  /// item (`ThisDeviceOnly`), whichever of the two accounts holds it.
+  @objc public func keyLevel(_ invoke: Invoke) throws {
+    invoke.resolve(["level": "kc"])
   }
 
   @objc public func boundToUser(_ invoke: Invoke) throws {

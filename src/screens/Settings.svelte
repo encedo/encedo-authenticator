@@ -10,6 +10,29 @@
 
   let copied = $state(false);
   let lockNote = $state<string | null>(null);
+  // DEV-512: turning the lock off first says why it is on by default.
+  let confirmOff = $state(false);
+  async function lockSwitched() {
+    if (!app.settings.biometric_lock) {
+      app.settings.biometric_lock = true;
+      confirmOff = true;
+      return;
+    }
+    confirmOff = false;
+    lockNote = await app.setBiometricLock(true);
+  }
+  async function turnLockOff() {
+    confirmOff = false;
+    lockNote = await app.setBiometricLock(false);
+  }
+  // DEV-512: where the storage key really is, as the key itself says.
+  const levelWord: Record<string, string> = { sb: "StrongBox", tee: "TEE", sw: "software", kc: "Keychain" };
+  const levelText: Record<string, string> = {
+    sb: "In a separate secure element (StrongBox), not only in the processor's secure world.",
+    tee: "In the processor's secure world (TEE).",
+    sw: "In software: this phone keeps it without secure hardware.",
+    kc: "In the iOS Keychain, on this device only; it is not a Secure Enclave key.",
+  };
   // The update screens cannot be reached without publishing a release, so a
   // development build can pretend Play said something.
   let isDev = $state(false);
@@ -58,8 +81,21 @@
       </h1>
     </div>
     <div>
-      <Switch label="Lock with biometrics" hint="On launch, and it binds the storage key to you" bind:checked={app.settings.biometric_lock} onchange={async () => { lockNote = await app.setBiometricLock(app.settings.biometric_lock); }} />
-      <Switch label="Lock when in background" hint="Ask again after switching apps" bind:checked={app.settings.lock_on_background} onchange={() => app.saveSettings()} />
+      <Switch label="Lock with biometrics" hint="On launch, and it binds the storage key to you" bind:checked={app.settings.biometric_lock} onchange={lockSwitched} />
+      {#if confirmOff}
+        <div class="card exposed">
+          <div class="card-head"><span>Turn the lock off?</span></div>
+          <div class="status-note">The lock is on by default because it is what makes an Allow yours: without it, anyone holding this phone unlocked can approve a request, and every answer tells the module that nobody was verified. The storage key stops being bound to you as well.</div>
+          <div class="card-foot">
+            <button class="button quiet small" onclick={() => (confirmOff = false)}>Keep it on</button>
+            <button class="button exposed small" onclick={turnLockOff}>Turn it off</button>
+          </div>
+        </div>
+      {/if}
+      <Switch label="Lock when in background" hint="Ask again after switching apps, or after 5 min untouched" bind:checked={app.settings.lock_on_background} onchange={() => app.saveSettings()} />
+      {#if app.settings.biometric_lock}
+        <Switch label="Confirm every Allow" hint="Ask for your fingerprint or PIN again before an answer is sent" bind:checked={app.settings.confirm_each_allow} onchange={() => app.saveSettings()} />
+      {/if}
     </div>
     <div class="field">
       <span class="label">Appearance</span>
@@ -82,7 +118,7 @@
                 { term: "Bound to you", text: `The secure hardware releases that key ${window}. Someone in full control of this phone can ask for it as this app, but not without you.` },
                 { term: "Not bound", text: "The key is released to the app whenever it runs, so anything running with the app's rights can read the storage." },
                 { term: "What it cannot do", text: "While the app is open and unlocked, the key is in its memory. A phone taken over at that moment is a phone taken over." },
-                { term: "Where it lives", text: app.storeStatus?.strong_box ? "In a separate secure element (StrongBox), not only in the processor's secure world." : "In the processor's secure world; this phone has no separate secure element." },
+                { term: "Where it lives", text: levelText[app.storeStatus?.level ?? ""] ?? "The system does not say." },
               ]}
             />
           </span>
@@ -90,7 +126,7 @@
         </div>
         <dl class="status-grid">
           <div><dt>Released after</dt><dd>{app.storeStatus?.bound_to_user ? window : "nothing; whenever the app runs"}</dd></div>
-          <div><dt>Secure element</dt><dd>{app.storeStatus?.strong_box ? "StrongBox" : "TEE"}</dd></div>
+          <div><dt>Key is in</dt><dd class:risk={app.storeStatus?.level === "sw"}>{levelWord[app.storeStatus?.level ?? ""] ?? "unknown"}</dd></div>
           <div><dt>Screen lock</dt><dd class:risk={app.storeStatus ? !app.storeStatus.credential : false}>{app.storeStatus?.credential ? "set on this phone" : "none, so the key cannot be bound"}</dd></div>
           <div><dt>While locked</dt><dd>nothing is decrypted</dd></div>
         </dl>

@@ -40,7 +40,7 @@ mod mobile_secret {
     use rand_core::{OsRng, RngCore};
     use tauri_plugin_encedo_keystore::{KeystoreError, KeystoreExt};
 
-    use crate::store::{DataKey, Protection, SecretStore, StoreError};
+    use crate::store::{DataKey, KeyLevel, Protection, SecretStore, StoreError};
 
     /// The data key, wrapped by the platform's key store (Android Keystore, iOS
     /// Keychain), in `store.key`. A fresh install is wrapped plain, because the
@@ -93,8 +93,10 @@ mod mobile_secret {
         fn protection(&self) -> Protection {
             let ks = self.app.keystore();
             let bound = fs::read(&self.path).ok().and_then(|blob| ks.bound_to_user(&blob).ok()).unwrap_or(false);
+            // DEV-512: the level of the key that wraps the blob now, not of the phone
+            let level = ks.key_level(bound).ok().flatten().as_deref().and_then(KeyLevel::parse);
             match ks.protection() {
-                Ok(p) => Protection { bound_to_user: bound, credential: p.credential, strong_box: p.strong_box, window_seconds: p.window_seconds },
+                Ok(p) => Protection { bound_to_user: bound, credential: p.credential, strong_box: p.strong_box, window_seconds: p.window_seconds, level },
                 Err(_) => Protection { bound_to_user: bound, ..Protection::default() },
             }
         }
@@ -219,6 +221,7 @@ pub fn run() {
             commands::log_clear_trace,
             commands::log_push,
             commands::log_app,
+            commands::user_verified,
             commands::log_flush,
             commands::pair_scan,
             commands::pair_confirm,

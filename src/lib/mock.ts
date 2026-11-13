@@ -97,6 +97,7 @@ export function makeRequest(kind: DemoKind, mod: ModuleView): RequestView {
   return {
     id: `req-${seq}`, pid: mod.pid, module_label: mod.label, host: mod.host, scope: c.scope, exp: Math.floor(Date.now() / 1000) + 90,
     issuer: { city: "Warsaw", country: "PL", ip: "203.0.113.7" },
+    note: kind === "keymgmt:use" ? "Open Mercato sign-in" : null,
     kind: kind.split(":")[0], title: c.title, phrase: c.phrase, details: c.details, ask_period: true, ask_writable: !!c.ask_writable, writable_default: !!c.writable_default, known: true,
   };
 }

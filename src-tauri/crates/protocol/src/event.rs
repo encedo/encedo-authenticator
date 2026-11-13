@@ -27,6 +27,10 @@ pub struct Event {
     pub exp: u64,
     #[serde(default)]
     pub ipinfo_eid: Option<IpInfo>,
+    /// What the requester says the access is for (`note` of `ext/request`, 1-128
+    /// chars), passed on by the broker as plain text: shown, never trusted (DEV-512).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Default)]
@@ -99,6 +103,33 @@ pub fn open_scope(event: &Event, app: &KeyPair, eid: &[u8; 32], now: u64) -> Res
     Ok(OpenedScope { scope })
 }
 
+/// The app's login context (DEV-512): how the person at this phone was
+/// verified, under the authreply's MAC. The HEM copies it 1:1 into its token
+/// and into the `auth` block of the key attestation (FW DEV-511) without
+/// reading it; Encedo OIDC turns it into `amr` / `acr`. A statement of the
+/// app, not a proof.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Actx {
+    /// Format version.
+    pub v: u8,
+    /// `bio+pin`, `pin` or `none`: what unlocks this app.
+    pub lock: &'static str,
+    /// Seconds from the last user verification to `iat`; absent with `lock: none`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uva: Option<u64>,
+    /// `android` or `ios`.
+    pub aos: &'static str,
+    /// Version and commit of this build, `2.0.0-dev.15+9bad376`.
+    pub app: String,
+    /// Where the storage wrapping key is: `sb`, `tee`, `sw` or `kc`; absent when unknown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hw: Option<&'static str>,
+}
+
+/// The longest `actx` the HEM copies (serialized, FW `AUTH_ACTX_MAX`); a longer
+/// one would be dropped there without a word, so it is refused here.
+pub const ACTX_MAX: usize = 128;
+
 #[derive(Serialize)]
 struct AllowClaims<'a> {
     aud: &'a str,
@@ -108,6 +139,8 @@ struct AllowClaims<'a> {
     pid: &'a str,
     iss: String,
     scope: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actx: Option<&'a Actx>,
 }
 
 /// Body of `POST /notify/event/data/{event}/{pidx}`.
@@ -124,7 +157,15 @@ pub struct AllowReply {
 
 /// Grant `scope` (as decrypted) for `period_secs` from `now`, with `:rw` on
 /// the drive value when `writable` (and stripped otherwise, as v1 does).
-pub fn allow(event: &Event, app: &KeyPair, eid_b64: &str, pid: &str, scope: &str, writable: bool, now: u64, period_secs: u64) -> Result<AllowReply> {
+/// `actx` goes into the claims when given; without it the reply is byte for
+/// byte what v1 sent.
+#[allow(clippy::too_many_arguments)]
+pub fn allow(event: &Event, app: &KeyPair, eid_b64: &str, pid: &str, scope: &str, writable: bool, now: u64, period_secs: u64, actx: Option<&Actx>) -> Result<AllowReply> {
+    if let Some(a) = actx {
+        if serde_json::to_string(a).map_err(|_| Error::Malformed("actx"))?.len() > ACTX_MAX {
+            return Err(Error::Malformed("actx size"));
+        }
+    }
     let eid = b64_decode_32(eid_b64).ok_or(Error::Malformed("eid"))?;
     let epk = b64_decode_32(&event.epk).ok_or(Error::Malformed("epk"))?;
     // FW 1.3.x: `:rw` belongs to the storage value of a list (one at most), `#<meta>` stays at the end
@@ -142,6 +183,7 @@ pub fn allow(event: &Event, app: &KeyPair, eid_b64: &str, pid: &str, scope: &str
         pid,
         iss: b64(&app.public_bytes()),
         scope: session.seal(&granted),
+        actx,
     };
     let jwt = sign_hs256(&claims, &session.s1);
     let mac = b64(&hmac_sha256(&app.shared(&epk), jwt.as_bytes()));

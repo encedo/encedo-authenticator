@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-key-level"
+description = "Enables the key_level command without any pre-configured scope."
+commands.allow = ["key_level"]
+
+[[permission]]
+identifier = "deny-key-level"
+description = "Denies the key_level command without any pre-configured scope."
+commands.deny = ["key_level"]

@@ -63,10 +63,51 @@ pub struct Protection {
     pub bound_to_user: bool,
     /// This phone has a screen lock, so binding is possible at all.
     pub credential: bool,
-    /// The key lives in a separate secure element, not only the TEE.
+    /// The phone has a separate secure element (StrongBox) a key can be made in.
     pub strong_box: bool,
     /// How long one confirmation authorises the key for.
     pub window_seconds: u32,
+    /// Where the key actually is, read from the key (DEV-512); None when unknown.
+    pub level: Option<KeyLevel>,
+}
+
+/// Where the storage wrapping key lives (DEV-512). The names are the `hw`
+/// values of the login context.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub enum KeyLevel {
+    /// Android StrongBox: a separate secure element.
+    #[serde(rename = "sb")]
+    StrongBox,
+    /// Android Keystore in the processor's trusted environment.
+    #[serde(rename = "tee")]
+    Tee,
+    /// Android Keystore in software.
+    #[serde(rename = "sw")]
+    Software,
+    /// iOS keychain item, this device only.
+    #[serde(rename = "kc")]
+    Keychain,
+}
+
+impl KeyLevel {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "sb" => Some(Self::StrongBox),
+            "tee" => Some(Self::Tee),
+            "sw" => Some(Self::Software),
+            "kc" => Some(Self::Keychain),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::StrongBox => "sb",
+            Self::Tee => "tee",
+            Self::Software => "sw",
+            Self::Keychain => "kc",
+        }
+    }
 }
 
 /// Where the data key lives. Implementations must return the same 32 bytes
@@ -300,11 +341,14 @@ pub struct Settings {
     pub lock_on_background: bool,
     pub theme: String,
     pub onboarded: bool,
+    /// DEV-512: ask for biometrics or the PIN again on every Allow.
+    #[serde(default)]
+    pub confirm_each_allow: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { biometric_lock: true, lock_on_background: true, theme: "system".into(), onboarded: false }
+        Self { biometric_lock: true, lock_on_background: true, theme: "system".into(), onboarded: false, confirm_each_allow: false }
     }
 }
 

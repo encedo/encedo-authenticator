@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use encedo_authenticator_lib::core::{now, Core, CoreError, ErrorView};
 use encedo_authenticator_lib::notify::NotifyClient;
-use encedo_authenticator_lib::store::{DataKey, DevFileSecret, Family, Level, LogEntry, Outcome, Protection, SecretStore, StoreError};
+use encedo_authenticator_lib::store::{DataKey, DevFileSecret, Family, KeyLevel, Level, LogEntry, Outcome, Protection, SecretStore, StoreError};
 use encedo_protocol::event::PERIODS;
 use encedo_protocol::hem::Hem;
 use encedo_protocol::pairing::{PairingReply, PairingRequest};
@@ -459,6 +459,63 @@ async fn allow_hands_the_module_a_grant_it_can_verify() {
     assert!(f.core.refresh().await.expect("refresh").is_empty());
 }
 
+/// DEV-512: the grant carries the login context, and the module reads it 1:1.
+#[tokio::test]
+async fn allow_carries_the_login_context() {
+    let f = Fixture::new().await;
+    let aid = f.pending_event("keymgmt:list", now() + 300).await;
+    f.broker.on("POST", EVENT, 200, "{}");
+    f.core.opened("2.0.0-dev.15").expect("opened");
+    f.core.user_verified(true);
+
+    f.core.refresh().await.expect("refresh");
+    f.core.allow("ev1", PERIODS[0], false).await.expect("allow");
+    let granted = f.hem.check_allow(&aid, JTI, &f.broker.last("POST", EVENT).json()).expect("grant");
+    let actx = granted.actx.expect("actx in the authreply");
+    assert_eq!(actx["v"], 1);
+    assert_eq!(actx["lock"], "bio+pin");
+    assert!(actx["uva"].as_u64().expect("uva") < 5, "{actx}");
+    assert_eq!(actx["aos"], std::env::consts::OS);
+    assert!(actx["app"].as_str().expect("app").starts_with("2.0.0-dev.15+"), "{actx}");
+    // the dev key file says nothing about hardware, so there is no hw
+    assert!(actx.get("hw").is_none(), "{actx}");
+    assert!(actx.to_string().len() <= 128);
+    assert_eq!(f.field(&f.latest("request.granted"), "Login context"), actx.to_string());
+}
+
+/// DEV-512: with the lock off, nobody was asked: `none`, no `uva`.
+#[tokio::test]
+async fn allow_with_the_lock_off_says_none() {
+    let f = Fixture::new().await;
+    let aid = f.pending_event("keymgmt:list", now() + 300).await;
+    f.broker.on("POST", EVENT, 200, "{}");
+    let mut settings = f.core.settings().expect("settings");
+    settings.biometric_lock = false;
+    f.core.set_settings(settings).expect("lock off");
+    f.core.user_verified(false);
+
+    f.core.refresh().await.expect("refresh");
+    f.core.allow("ev1", PERIODS[0], false).await.expect("allow");
+    let actx = f.hem.check_allow(&aid, JTI, &f.broker.last("POST", EVENT).json()).expect("grant").actx.expect("actx");
+    assert_eq!(actx["lock"], "none");
+    assert!(actx.get("uva").is_none(), "{actx}");
+}
+
+/// DEV-512 / DEV-513: the broker's note reaches the screen as one plain line.
+#[tokio::test]
+async fn the_request_shows_the_note_as_plain_text() {
+    let f = Fixture::new().await;
+    let aid = f.pair().await;
+    let mut event = f.hem.event(&aid, JTI, "keymgmt:list", now() + 300).expect("event");
+    event.note = Some("Open\nMercato \u{7}".into());
+    f.broker.on("POST", "/allbypid", 200, &format!(r#"{{"eventid":{{"ev1":["{PID}"]}}}}"#));
+    f.broker.on("GET", EVENT, 200, &serde_json::to_string(&event).expect("event json"));
+
+    let shown = f.core.refresh().await.expect("refresh");
+    assert_eq!(shown[0].note.as_deref(), Some("Open Mercato"));
+    assert_eq!(f.field(&f.latest("request.shown"), "Note"), "Open Mercato");
+}
+
 #[tokio::test]
 async fn a_period_the_app_does_not_offer_falls_back_to_fifteen_minutes() {
     let f = Fixture::new().await;
@@ -694,7 +751,7 @@ impl SecretStore for FakeSecret {
     }
 
     fn protection(&self) -> Protection {
-        Protection { bound_to_user: self.bound(), credential: self.credential, strong_box: true, window_seconds: 30 }
+        Protection { bound_to_user: self.bound(), credential: self.credential, strong_box: true, window_seconds: 30, level: Some(KeyLevel::StrongBox) }
     }
 
     fn bind_to_user(&self, bound: bool) -> Result<(), StoreError> {

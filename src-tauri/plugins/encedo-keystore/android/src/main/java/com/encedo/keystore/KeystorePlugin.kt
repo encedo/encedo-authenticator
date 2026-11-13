@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyInfo
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
@@ -21,6 +22,7 @@ import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 
 @InvokeArg
@@ -150,6 +152,43 @@ class KeystorePlugin(private val activity: Activity) : Plugin(activity) {
         out.put("strongBox", hasStrongBox())
         out.put("windowSeconds", AUTH_WINDOW_SECONDS)
         invoke.resolve(out)
+    }
+
+    /**
+     * DEV-512: where the wrapping key really is, read from the key itself:
+     * StrongBox is asked for and given up on quietly, so the phone having one
+     * says little. `sb`, `tee` or `sw`; absent before the key exists or when
+     * Android cannot tell.
+     */
+    @Command
+    fun keyLevel(invoke: Invoke) {
+        val out = JSObject()
+        try {
+            val auth = invoke.parseArgs(BytesArg::class.java).auth
+            level(if (auth) AUTH_ALIAS else PLAIN_ALIAS)?.let { out.put("level", it) }
+        } catch (e: Exception) {
+            // Unknown is an answer: the context then carries no hw.
+        }
+        invoke.resolve(out)
+    }
+
+    private fun level(alias: String): String? {
+        val entry = keystore().getEntry(alias, null) as? KeyStore.SecretKeyEntry ?: return null
+        val key = entry.secretKey
+        val info = SecretKeyFactory.getInstance(key.algorithm, PROVIDER).getKeySpec(key, KeyInfo::class.java) as KeyInfo
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return when (info.securityLevel) {
+                KeyProperties.SECURITY_LEVEL_STRONGBOX -> "sb"
+                KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> "tee"
+                KeyProperties.SECURITY_LEVEL_SOFTWARE -> "sw"
+                else -> null // unknown, or secure hardware Android cannot name
+            }
+        }
+        // Before Android 12 only "in secure hardware or not" is known; a StrongBox
+        // key is reported as tee there, never the other way round.
+        @Suppress("DEPRECATION")
+        val secure = info.isInsideSecureHardware
+        return if (secure) "tee" else "sw"
     }
 
     @Command

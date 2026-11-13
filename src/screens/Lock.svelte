@@ -5,6 +5,8 @@
   // Before the storage is open nothing has been read yet, not even the settings:
   // the key itself waits for the confirmation.
   const closed = $derived(app.storeStatus?.open === false);
+  // DEV-512: no screen lock on the phone: the app lock went off, and the person acknowledges it here.
+  const noLock = $derived(["biometryNotEnrolled", "noDeviceCredential", "passcodeNotSet"].includes(app.lockError?.code ?? ""));
   onMount(() => {
     // Give the activity a moment to be in front before the system prompt.
     const t = setTimeout(() => void app.unlock(), 250);
@@ -17,7 +19,7 @@
     <div class="stack">
       <Mark size={44} />
       <div class="page-head" style="padding-top:0">
-        <p class="eyebrow" class:exposed={!!app.lockError} class:muted={!app.lockError}>{app.lockError ? "Not confirmed" : "Locked"}</p>
+        <p class="eyebrow" class:exposed={!!app.lockError} class:muted={!app.lockError}>{noLock ? "Lower security" : app.lockError ? "Not confirmed" : "Locked"}</p>
         <h1>{closed ? "This phone is locked." : app.pending.length ? `${count(app.pending.length, "request")} waiting for you.` : "Nothing is waiting for you."}</h1>
         {#if app.lockError}
           <p>{app.lockError.message}</p>
@@ -32,6 +34,6 @@
     </div>
   </div>
   <div class="screen-actions">
-    <button class="button" disabled={app.unlocking} onclick={() => app.unlock()}>{app.unlocking ? "Waiting for the system…" : app.lockError ? "Try again" : "Unlock"}</button>
+    <button class="button" disabled={app.unlocking} onclick={() => app.unlock()}>{app.unlocking ? "Waiting for the system…" : noLock ? "I understand, continue" : app.lockError ? "Try again" : "Unlock"}</button>
   </div>
 </div>

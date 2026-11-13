@@ -44,6 +44,10 @@
       <div class="card asking">
         <div class="card-head"><span>scope</span><span class="v truncate">{req.scope}</span></div>
         <dl class="status-grid">
+          {#if req.note}
+            <!-- DEV-512: the requester's own words, plain text, not verified -->
+            <div class="wide"><dt>Says it is for</dt><dd class="truncate">{req.note}</dd></div>
+          {/if}
           <div><dt>Module</dt><dd>{req.module_label || shortPid(req.pid)}</dd></div>
           <div><dt>Host</dt><dd class="mono">{req.host}</dd></div>
           {#each req.details as d}
@@ -70,6 +74,9 @@
         <div>
           <Switch label="Allow writing" hint={writable ? "While unlocked, the contents are as safe as the host" : "Read-only: the host may read the drive, not change it"} bind:checked={writable} />
         </div>
+      {/if}
+      {#if app.allowNote}
+        <div class="status-note">{app.allowNote}</div>
       {/if}
     </div>
     <div class="screen-actions row">

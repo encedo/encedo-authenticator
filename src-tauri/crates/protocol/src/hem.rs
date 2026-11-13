@@ -30,6 +30,8 @@ pub struct Granted {
     pub pid: String,
     pub iat: u64,
     pub exp: u64,
+    /// `actx` as the HEM copies it, 1:1 (DEV-511 / DEV-512).
+    pub actx: Option<Value>,
 }
 
 /// A module with its long-term key (`eid`) and the broker's ephemeral key
@@ -139,6 +141,7 @@ impl Hem {
             epk: self.epk(),
             exp,
             ipinfo_eid: Some(Self::ipinfo()),
+            note: None,
         })
     }
 
@@ -175,13 +178,14 @@ impl Hem {
         let sealed = p.get("scope").and_then(Value::as_str).ok_or(Error::MalformedField("allow", "scope"))?;
         // The granted scope travels sealed under the same session key; opening it
         // needs no expiry check, so pass an event that cannot be expired.
-        let holder = Event { jti: jti.to_string(), scope: sealed.to_string(), epk: String::new(), exp: u64::MAX, ipinfo_eid: None };
+        let holder = Event { jti: jti.to_string(), scope: sealed.to_string(), epk: String::new(), exp: u64::MAX, ipinfo_eid: None, note: None };
         let scope = open_scope(&holder, &self.keys, &aid, 0)?.scope;
         Ok(Granted {
             scope,
             pid: p.get("pid").and_then(Value::as_str).unwrap_or_default().to_string(),
             iat: p.get("iat").and_then(Value::as_u64).unwrap_or_default(),
             exp: p.get("exp").and_then(Value::as_u64).unwrap_or_default(),
+            actx: p.get("actx").cloned(),
         })
     }
 
@@ -250,10 +254,10 @@ mod tests {
         let opened = open_scope(&ev, &phone, &b64_decode_32(&hem.eid()).unwrap(), 1_000).unwrap();
         assert_eq!(opened.scope, "storage:disk:home");
 
-        let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, true, 1_000, PERIODS[1]).unwrap();
+        let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, true, 1_000, PERIODS[1], None).unwrap();
         let body = serde_json::to_value(&reply).unwrap();
         let granted = hem.check_allow(&aid, "amNRPXl5", &body).unwrap();
-        assert_eq!(granted, Granted { scope: "storage:disk:home:rw".into(), pid: "pid-1".into(), iat: 1_000, exp: 1_000 + PERIODS[1] });
+        assert_eq!(granted, Granted { scope: "storage:disk:home:rw".into(), pid: "pid-1".into(), iat: 1_000, exp: 1_000 + PERIODS[1], actx: None });
     }
 
     /// FW 1.3.x multi-scope: `:rw` lands on the drive value, not at the end of the list.
@@ -272,10 +276,50 @@ mod tests {
         ] {
             let ev = hem.event(&aid, "amNRPXl5", asked, 2_000_000_000).unwrap();
             let opened = open_scope(&ev, &phone, &eid, 1_000).unwrap();
-            let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, writable, 1_000, PERIODS[0]).unwrap();
+            let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, writable, 1_000, PERIODS[0], None).unwrap();
             let body = serde_json::to_value(&reply).unwrap();
             assert_eq!(hem.check_allow(&aid, "amNRPXl5", &body).unwrap().scope, expected, "{asked}");
         }
+    }
+
+    /// DEV-512: the login context rides inside the signed authreply and reaches
+    /// the module exactly as the app wrote it; FW 1.3 copies it 1:1 (DEV-511).
+    #[test]
+    fn allow_carries_actx() {
+        use crate::event::{Actx, ACTX_MAX};
+        let hem = Hem::with_seeds(7, 9);
+        let phone = KeyPair::from_secret([3u8; 32]);
+        let aid = b64(&phone.public_bytes());
+        let eid = b64_decode_32(&hem.eid()).unwrap();
+        let ev = hem.event(&aid, "amNRPXl5", "keymgmt:use:2ba3", 2_000_000_000).unwrap();
+        let opened = open_scope(&ev, &phone, &eid, 1_000).unwrap();
+
+        let actx = Actx { v: 1, lock: "bio+pin", uva: Some(12), aos: "android", app: "2.0.0-dev.15+9bad376".into(), hw: Some("sb") };
+        let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, false, 1_000, PERIODS[0], Some(&actx)).unwrap();
+        let granted = hem.check_allow(&aid, "amNRPXl5", &serde_json::to_value(&reply).unwrap()).unwrap();
+        let expected = json!({ "v": 1, "lock": "bio+pin", "uva": 12, "aos": "android", "app": "2.0.0-dev.15+9bad376", "hw": "sb" });
+        assert_eq!(granted.actx, Some(expected.clone()));
+        // the order the app writes is the order the module copies
+        assert_eq!(serde_json::to_string(&actx).unwrap(), expected.to_string());
+
+        // lock none: no uva; unknown key level: no hw
+        let none = Actx { v: 1, lock: "none", uva: None, aos: "ios", app: "2.0.0+abc1234".into(), hw: None };
+        let reply = allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, false, 1_000, PERIODS[0], Some(&none)).unwrap();
+        let granted = hem.check_allow(&aid, "amNRPXl5", &serde_json::to_value(&reply).unwrap()).unwrap();
+        assert_eq!(granted.actx, Some(json!({ "v": 1, "lock": "none", "aos": "ios", "app": "2.0.0+abc1234" })));
+
+        // what the HEM would drop silently is refused here
+        let long = Actx { app: "x".repeat(ACTX_MAX), ..actx };
+        assert_eq!(allow(&ev, &phone, &hem.eid(), "pid-1", &opened.scope, false, 1_000, PERIODS[0], Some(&long)).unwrap_err(), Error::Malformed("actx size"));
+    }
+
+    /// DEV-512 / DEV-513: the broker's `note` is optional; old and new broker replies both parse.
+    #[test]
+    fn event_note_is_optional() {
+        let with: Event = serde_json::from_value(json!({ "jti": "j", "scope": "A", "epk": "e", "exp": 1, "note": "Open Mercato" })).unwrap();
+        assert_eq!(with.note.as_deref(), Some("Open Mercato"));
+        let without: Event = serde_json::from_value(json!({ "jti": "j", "scope": "A", "epk": "e", "exp": 1 })).unwrap();
+        assert_eq!(without.note, None);
     }
 
     #[test]

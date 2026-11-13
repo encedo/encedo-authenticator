@@ -43,12 +43,24 @@ struct BoundOut {
     bound: bool,
 }
 
+#[derive(Serialize)]
+struct LevelArg {
+    auth: bool,
+}
+
+#[derive(Deserialize)]
+struct LevelOut {
+    level: Option<String>,
+}
+
 /// What this phone can protect the key with.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Protection {
     /// There is a screen lock, so a key can be bound to the person.
     pub credential: bool,
-    /// The key sits in a separate secure element, not only in the TEE.
+    /// The phone has a separate secure element (Android StrongBox) a key can be
+    /// made in. Whether the key really is there is [`Keystore::key_level`]; iOS
+    /// says false, its key is a keychain item (DEV-512).
     #[serde(rename = "strongBox")]
     pub strong_box: bool,
     /// How long a confirmation authorises the key for.
@@ -102,6 +114,22 @@ impl<R: Runtime> Keystore<R> {
         #[cfg(not(mobile))]
         {
             Err(KeystoreError { code: "keystore".into(), message: "not available on this platform".into() })
+        }
+    }
+
+    /// DEV-512: where the wrapping key `auth` picks actually lives, read from the
+    /// key: `sb` StrongBox, `tee`, `sw` (Android) or `kc` (iOS keychain). None
+    /// before the key exists, or when the system cannot say.
+    pub fn key_level(&self, auth: bool) -> Result<Option<String>, KeystoreError> {
+        #[cfg(mobile)]
+        {
+            let out: LevelOut = self.0.run_mobile_plugin("keyLevel", LevelArg { auth }).map_err(|e| KeystoreError::parse(e.to_string()))?;
+            Ok(out.level)
+        }
+        #[cfg(not(mobile))]
+        {
+            let _ = auth;
+            Ok(None)
         }
     }
 

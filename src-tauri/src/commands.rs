@@ -113,6 +113,13 @@ pub fn log_app(core: State<'_, Core>, kind: String, title: String, summary: Stri
     map(core.log_app(&kind, &title, &summary))
 }
 
+/// DEV-512: the person has just confirmed who they are (app unlock or the Allow
+/// prompt). `biometrics`: the phone has them enrolled, so the lock is `bio+pin`.
+#[tauri::command]
+pub fn user_verified(core: State<'_, Core>, biometrics: bool) {
+    core.user_verified(biometrics);
+}
+
 /// Going to the background: write out what the commentary has collected.
 #[tauri::command]
 pub fn log_flush(core: State<'_, Core>) -> Res<()> {

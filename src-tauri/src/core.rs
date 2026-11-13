@@ -4,10 +4,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use encedo_protocol::codec::{b64, b64_decode_32};
-use encedo_protocol::event::{self, Event, IpInfo};
+use encedo_protocol::event::{self, Actx, Event, IpInfo};
 use encedo_protocol::keys::KeyPair;
 use encedo_protocol::pairing::{self, PairingRequest};
 use encedo_protocol::unpair;
@@ -17,7 +17,7 @@ use serde::Serialize;
 use crate::diag::brief;
 use crate::notify::{NotifyClient, NotifyError, PairingCode};
 use crate::scope::{describe, ScopeView};
-use crate::store::{AuditHealth, Family, Level, LogEntry, LogField, ModuleRecord, Outcome, Protection, SecretStore, Settings, Store, StoreError};
+use crate::store::{AuditHealth, Family, KeyLevel, Level, LogEntry, LogField, ModuleRecord, Outcome, Protection, SecretStore, Settings, Store, StoreError};
 
 pub fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
@@ -129,6 +129,9 @@ pub struct RequestView {
     pub scope: String,
     pub exp: u64,
     pub issuer: Option<IpInfo>,
+    /// What the requester says the access is for, from the broker (DEV-512):
+    /// plain text, one line, 128 chars at most. Not verified by anything.
+    pub note: Option<String>,
     #[serde(flatten)]
     pub view: ScopeView,
 }
@@ -285,6 +288,36 @@ pub struct Core {
     /// Trace lines waiting for the next write, so a running commentary does not
     /// mean a file write per line. Drained by [`Core::with_store`].
     pending_trace: Mutex<Vec<LogEntry>>,
+    /// DEV-512: when the person last confirmed who they are in this run (app
+    /// unlock or the Allow prompt), and whether the phone has biometrics. On a
+    /// monotonic clock, so setting the phone's time changes nothing. Not stored:
+    /// a new run has seen nobody yet.
+    verified: Mutex<Option<(Instant, bool)>>,
+    /// The build as the login context names it, `2.0.0-dev.15+9bad376`.
+    app_label: Mutex<String>,
+}
+
+/// The longest `app` value put into the login context, so `actx` stays within
+/// what the HEM copies (128 B).
+const APP_LABEL_MAX: usize = 40;
+
+/// `aos` of the login context.
+fn aos() -> &'static str {
+    if cfg!(target_os = "android") {
+        "android"
+    } else if cfg!(target_os = "ios") {
+        "ios"
+    } else {
+        std::env::consts::OS
+    }
+}
+
+/// What the requester wrote, made safe to show: control characters become
+/// spaces, at most 128 characters, nothing when it is empty.
+fn note_of(event: &Event) -> Option<String> {
+    let note: String = event.note.as_deref()?.chars().map(|c| if c.is_control() { ' ' } else { c }).take(128).collect();
+    let note = note.trim();
+    (!note.is_empty()).then(|| note.to_string())
 }
 
 impl Core {
@@ -299,7 +332,36 @@ impl Core {
             device_name,
             last_refresh: Mutex::new(RefreshReport::default()),
             pending_trace: Mutex::new(Vec::new()),
+            verified: Mutex::new(None),
+            app_label: Mutex::new(String::new()),
         }
+    }
+
+    /// DEV-512: the person has just confirmed who they are (biometrics or the
+    /// device PIN), on a phone with or without biometrics enrolled.
+    pub fn user_verified(&self, biometrics: bool) {
+        if let Ok(mut v) = self.verified.lock() {
+            *v = Some((Instant::now(), biometrics));
+        }
+    }
+
+    /// The build this core runs in: the package version and the commit.
+    fn app_label(&self) -> String {
+        let version = self.app_label.lock().map(|l| l.clone()).unwrap_or_default();
+        let version = if version.is_empty() { env!("CARGO_PKG_VERSION").to_string() } else { version };
+        format!("{version}+{}", env!("APP_COMMIT")).chars().take(APP_LABEL_MAX).collect()
+    }
+
+    /// DEV-512: the login context of an answer. `lock` says what unlocks the
+    /// app and `uva` how long ago that happened; with the lock off, or before
+    /// anyone confirmed in this run, the context says `none` and has no `uva`.
+    pub fn actx(&self, settings: &Settings) -> Actx {
+        let verified = self.verified.lock().ok().and_then(|v| *v);
+        let (lock, uva) = match (settings.biometric_lock, verified) {
+            (true, Some((at, biometrics))) => (if biometrics { "bio+pin" } else { "pin" }, Some(at.elapsed().as_secs())),
+            _ => ("none", None),
+        };
+        Actx { v: 1, lock, uva, aos: aos(), app: self.app_label(), hw: self.secrets.protection().level.map(KeyLevel::as_str) }
     }
 
     /// Open the storage. Fails with [`StoreError::AuthRequired`] when the key is
@@ -460,6 +522,9 @@ impl Core {
     /// The first things done with a newly opened store: sweep what the previous
     /// version left behind, and write the line that opens the session.
     pub fn opened(&self, version: &str) -> Result<(), CoreError> {
+        if let Ok(mut l) = self.app_label.lock() {
+            *l = version.to_string(); // DEV-512: the login context names the build
+        }
         if let Some(dir) = self.store_path.parent() {
             let leftovers = crate::legacy::sweep_v1(dir);
             if !leftovers.is_empty() {
@@ -507,6 +572,9 @@ impl Core {
         }
         if before.lock_on_background != settings.lock_on_background {
             changed.push(format!("lock in background {}", if settings.lock_on_background { "on" } else { "off" }));
+        }
+        if before.confirm_each_allow != settings.confirm_each_allow {
+            changed.push(format!("confirm every Allow {}", if settings.confirm_each_allow { "on" } else { "off" }));
         }
         if before.theme != settings.theme {
             changed.push(format!("theme {}", settings.theme));
@@ -843,17 +911,19 @@ impl Core {
             )?;
             return Err(CoreError::State(format!("unknown scope {}", opened.scope)));
         }
-        self.record(
-            Note::new("request.shown", Family::Answers, Level::Plain, "Request shown")
-                .pid(pid)
-                .about(format!("{} · expires {}", opened.scope, fmt_at(event.exp)))
-                .mono("Scope", opened.scope.clone())
-                .mono("Event", event_id.to_string())
-                .mono("jti", event.jti.clone())
-                .field("Expires", fmt_at(event.exp))
-                .field("Module", module.label.clone())
-                .field("Asked from", place(&event.ipinfo_eid)),
-        )?;
+        let mut shown = Note::new("request.shown", Family::Answers, Level::Plain, "Request shown")
+            .pid(pid)
+            .about(format!("{} · expires {}", opened.scope, fmt_at(event.exp)))
+            .mono("Scope", opened.scope.clone())
+            .mono("Event", event_id.to_string())
+            .mono("jti", event.jti.clone())
+            .field("Expires", fmt_at(event.exp))
+            .field("Module", module.label.clone())
+            .field("Asked from", place(&event.ipinfo_eid));
+        if let Some(note) = note_of(&event) {
+            shown = shown.field("Note", note); // DEV-512
+        }
+        self.record(shown)?;
         let live = LiveRequest { pid: pid.into(), event, scope: opened.scope, view };
         let v = self.view_of(event_id, &live);
         self.live.lock().map_err(|_| CoreError::State("live poisoned".into()))?.insert(event_id.into(), live);
@@ -862,7 +932,7 @@ impl Core {
 
     fn view_of(&self, id: &str, r: &LiveRequest) -> RequestView {
         let (label, host) = self.with_store(|s| Ok(s.data.module(&r.pid).map(|m| (m.label.clone(), m.host.clone())))).ok().flatten().unwrap_or_default();
-        RequestView { id: id.into(), pid: r.pid.clone(), module_label: label, host, scope: r.scope.clone(), exp: r.event.exp, issuer: r.event.ipinfo_eid.clone(), view: r.view.clone() }
+        RequestView { id: id.into(), pid: r.pid.clone(), module_label: label, host, scope: r.scope.clone(), exp: r.event.exp, issuer: r.event.ipinfo_eid.clone(), note: note_of(&r.event), view: r.view.clone() }
     }
 
     /// This request will never be shown: remember it as handled and say why.
@@ -881,7 +951,8 @@ impl Core {
         let module = self.with_store(|s| Ok(s.data.module(&r.pid).cloned()))?.ok_or_else(|| CoreError::State("module gone".into()))?;
         let app = KeyPair::from_secret(b64_decode_32(&module.aid_prv).ok_or(CoreError::State("bad aid_prv".into()))?);
         let period = if event::PERIODS.contains(&period_secs) { period_secs } else { event::PERIODS[0] };
-        let reply = event::allow(&r.event, &app, &module.eid, &module.pid, &r.scope, writable, now(), period)?;
+        let actx = self.actx(&self.settings()?); // DEV-512
+        let reply = event::allow(&r.event, &app, &module.eid, &module.pid, &r.scope, writable, now(), period, Some(&actx))?;
         let detail = format!("{} · {}", reply.scope, period_label(period));
         let result = self.client.allow(id, &r.pid, &reply).await;
         self.note(format!("allow {} scope={} period={}: {:?}", brief(id, 6), reply.scope, period, result));
@@ -894,7 +965,8 @@ impl Core {
             .field("Until", fmt_at(reply.exp))
             .field("Writing", if writable { "allowed" } else { "not allowed" })
             .mono("Event", id.to_string())
-            .field("Asked from", place(&r.event.ipinfo_eid));
+            .field("Asked from", place(&r.event.ipinfo_eid))
+            .mono("Login context", serde_json::to_string(&actx).unwrap_or_default()); // DEV-512
         self.finish(&r, result, &detail, Outcome::Granted, note)
     }
 

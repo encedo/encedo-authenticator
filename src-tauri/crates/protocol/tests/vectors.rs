@@ -100,7 +100,7 @@ fn events_match_v1() {
 
         let exp = &case["expected"]["reply"];
         let period = inp["period_min"].as_u64().unwrap() * 60;
-        let out = allow(&event, &app, s(inp, "eid"), s(inp, "pid"), &opened.scope, inp["writable"].as_bool().unwrap(), now, period).unwrap();
+        let out = allow(&event, &app, s(inp, "eid"), s(inp, "pid"), &opened.scope, inp["writable"].as_bool().unwrap(), now, period, None).unwrap();
         assert_eq!(out.scope, s(exp, "scope_sent"), "{name} scope");
         assert_eq!(out.exp, exp["exp"].as_u64().unwrap(), "{name} exp");
         assert_eq!(out.authreply, s(exp, "authreply"), "{name} authreply");

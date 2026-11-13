@@ -9,6 +9,8 @@ export interface PairingPreview { link: string; user: string; hostname: string; 
 export interface Detail { label: string; value: string; mono: boolean }
 export interface RequestView {
   id: string; pid: string; module_label: string; host: string; scope: string; exp: number; issuer: IpInfo | null;
+  /** What the requester says the access is for (DEV-512): plain text from the broker, unverified. */
+  note: string | null;
   kind: string; title: string; phrase: string; details: Detail[]; ask_period: boolean; ask_writable: boolean; writable_default: boolean; known: boolean;
 }
 export type Outcome = "granted" | "denied" | "expired" | "cancelled" | "rejected" | "error" | "paired" | "unpaired";
@@ -30,7 +32,7 @@ export interface LogEntry {
 /** Whether the sealed chain still holds, and where it starts. */
 export interface AuditHealth { entries: number; pruned: number; broken_at: string | null }
 export interface AnswerView { outcome: Outcome; title: string; detail: string }
-export interface Settings { biometric_lock: boolean; lock_on_background: boolean; theme: "system" | "light" | "dark"; onboarded: boolean }
+export interface Settings { biometric_lock: boolean; lock_on_background: boolean; theme: "system" | "light" | "dark"; onboarded: boolean; /** DEV-512: ask again on every Allow. */ confirm_each_allow: boolean }
 export interface AppInfo { version: string; platform: string; broker: string }
 /** Whether this build may still be used, as Play sees it. */
 export type UpdateLevel = "none" | "recommended" | "critical";
@@ -57,9 +59,11 @@ export interface StoreStatus {
   bound_to_user: boolean;
   /** This phone has a screen lock, so binding is possible at all. */
   credential: boolean;
-  /** The key lives in a separate secure element, not only the TEE. */
+  /** The phone has a separate secure element (StrongBox) a key can be made in. */
   strong_box: boolean;
   window_seconds: number;
+  /** DEV-512: where the key actually is, read from the key; null when unknown. */
+  level: "sb" | "tee" | "sw" | "kc" | null;
 }
 export interface RefreshReport { at: number; pids: string[]; broker_said: string; pending: number; shown: number; discarded: string[]; error: string | null }
 
@@ -98,6 +102,8 @@ export const api = {
   logPush: (title: string | undefined, body: string | undefined, data: string | undefined, tapped: boolean) => call<void>("log_push", { title, body, data, tapped }),
   /** Lifecycle and lock events. The core refuses anything not on its list. */
   logApp: (kind: string, title: string, summary: string) => call<void>("log_app", { kind, title, summary }),
+  /** DEV-512: the person has just confirmed who they are; `biometrics` = enrolled on this phone. */
+  userVerified: (biometrics: boolean) => call<void>("user_verified", { biometrics }),
   /** Going to the background: write out what the commentary has collected. */
   logFlush: () => call<void>("log_flush"),
   /** A scanned code, a pasted one, or an `encedo-auth://pair?qr=…` link: one parser. */

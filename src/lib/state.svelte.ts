@@ -1,6 +1,6 @@
 import type { Settings } from "./api";
 import { api, ApiError, type AnswerView, type AuditHealth, type Family, type LogEntry, type ModuleView, type Outcome, type PairingPreview, type RefreshReport, type RequestView, type StoreStatus, type UpdateStatus } from "./api";
-import { biometricAuth, inTauri, trace, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
+import { biometricAuth, biometricStatus, inTauri, trace, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
 import * as mock from "./mock";
 import { listen } from "@tauri-apps/api/event";
 
@@ -25,7 +25,7 @@ export type Tab = "home" | "modules" | "history" | "settings";
 const SETTINGS_KEY = "encedo.settings.v2";
 
 function loadLocalSettings(): Settings {
-  const fallback: Settings = { biometric_lock: true, lock_on_background: true, theme: "system", onboarded: false };
+  const fallback: Settings = { biometric_lock: true, lock_on_background: true, theme: "system", onboarded: false, confirm_each_allow: false };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
@@ -62,8 +62,13 @@ class AppState {
   /** A pairing link that arrived while another pairing was on screen: the
    *  person decides whether it replaces that one. */
   incomingLink = $state<string | null>(null);
+  /** DEV-512: why the last Allow was not sent ("confirm every Allow" refused). */
+  allowNote = $state<string | null>(null);
   private returnTo: Screen | null = null;
   private static readonly LOCK_AFTER_MS = 5000;
+  /** DEV-512: this long untouched in front locks the app like going away does. */
+  private static readonly IDLE_LOCK_MS = 5 * 60 * 1000;
+  private lastActivity = Date.now();
 
   constructor() {
     $effect.root(() => {
@@ -90,6 +95,10 @@ class AppState {
       if (document.visibilityState === "hidden") { hiddenAt = Date.now(); trace("visibility hidden"); }
       else { const away = hiddenAt ? Date.now() - hiddenAt : 0; hiddenAt = 0; trace(`visibility visible away=${away}`); this.onLifecycle("resumed", away); }
     });
+    // DEV-512: a touch or a key keeps the app open; five minutes without one locks it.
+    const touched = () => { this.lastActivity = Date.now(); };
+    for (const ev of ["pointerdown", "keydown", "touchstart"]) document.addEventListener(ev, touched, { passive: true });
+    setInterval(() => this.lockIfIdle(), 15_000);
     try {
       this.storeStatus = await api.storeStatus();
       if (this.storeStatus.open) {
@@ -343,6 +352,27 @@ class AppState {
     else if (this.settings.onboarded && this.screen.name !== "lock" && this.screen.name !== "welcome") void this.refresh();
   }
 
+  /** DEV-512: left untouched in front for five minutes, the app locks as if the
+   *  person had walked away. Same switches as locking in the background. */
+  private lockIfIdle() {
+    if (!this.settings.onboarded || !this.settings.biometric_lock || !this.settings.lock_on_background || this.unlocking) return;
+    if (this.screen.name === "lock" || this.screen.name === "welcome") return;
+    if (Date.now() - this.lastActivity < AppState.IDLE_LOCK_MS) return;
+    trace("idle lock");
+    this.lockNow();
+  }
+
+  /** Ask the system who is there. On success the core is told, and the login
+   *  context of the next answer is dated from now (DEV-512). */
+  private async confirmPerson(reason: string) {
+    const r = await biometricAuth(reason);
+    if (r.ok && inTauri) {
+      const bio = await biometricStatus();
+      await api.userVerified(bio.available).catch(() => {});
+    }
+    return r;
+  }
+
   lockNow() {
     const s = this.screen;
     if (s.name === "lock") return;
@@ -362,7 +392,7 @@ class AppState {
     this.unlocking = true;
     this.lockError = null;
     try {
-      const r = await biometricAuth("Confirm it is you");
+      const r = await this.confirmPerson("Confirm it is you");
       if (r.ok) {
         if (closed && !(await this.openStore())) return;
         void this.logApp("app.unlocked", "Unlocked", closed ? "storage opened with your confirmation" : "confirmed on this phone");
@@ -373,9 +403,13 @@ class AppState {
       void this.logApp("app.lock_failed", "Not unlocked", r.message ?? r.code ?? "not confirmed");
       if (r.code === "biometryNotEnrolled" || r.code === "noDeviceCredential" || r.code === "passcodeNotSet") {
         // Nothing on this phone can confirm the person: the lock cannot hold.
+        // DEV-512: said plainly, and the person has to acknowledge it on the Lock screen.
         this.settings.biometric_lock = false;
         await this.saveSettings();
-        this.lockError = { code: r.code, message: "No screen lock is set on this phone, so the app lock was turned off." };
+        this.lockError = {
+          code: r.code,
+          message: "This phone has no screen lock, so the app cannot ask who you are and its lock is off. Anyone holding the phone can approve requests, and every answer tells the module nobody was verified. Set a screen lock in the system settings, then turn the app lock back on.",
+        };
         return;
       }
       this.lockError = { code: r.code, message: r.message ?? "Not confirmed." };
@@ -388,6 +422,7 @@ class AppState {
   }
 
   private leaveLock() {
+    this.lastActivity = Date.now();
     this.screen = this.returnTo ?? { name: "home" };
     this.returnTo = null;
     void this.refresh(this.screen.name === "home");
@@ -402,7 +437,7 @@ class AppState {
     if (inTauri) {
       this.unlocking = true; // the prompt pauses the activity; do not treat the return as "came back"
       try {
-        const r = await biometricAuth(on ? "Confirm to turn the lock on" : "Confirm to turn the lock off");
+        const r = await this.confirmPerson(on ? "Confirm to turn the lock on" : "Confirm to turn the lock off");
         if (!r.ok) {
           revert();
           if (r.code === "noDeviceCredential" || r.code === "passcodeNotSet" || r.code === "biometryNotEnrolled") {
@@ -480,6 +515,18 @@ class AppState {
       this.log = [mock.entry(allow ? "request.granted" : "request.denied", req.title, detail, req.pid, allow ? "granted" : "denied"), ...this.log];
       this.screen = { name: "result", outcome: allow ? "granted" : "denied", title: req.title, detail };
       return;
+    }
+    this.allowNote = null;
+    // DEV-512: "confirm every Allow" asks before anything is sent; refused, the
+    // request stays on screen and nothing leaves the phone.
+    if (allow && this.settings.biometric_lock && this.settings.confirm_each_allow) {
+      this.unlocking = true; // the prompt pauses the activity; do not treat the return as "came back"
+      try {
+        const r = await this.confirmPerson("Confirm to allow");
+        if (!r.ok) { this.allowNote = r.message ?? "Not confirmed, so nothing was sent."; return; }
+      } finally {
+        this.unlocking = false;
+      }
     }
     this.busy = true;
     try {

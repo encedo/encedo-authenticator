@@ -30,9 +30,8 @@ class MainActivity : TauriActivity() {
     }
 
     // What this app shows is a security decision: no screenshots, no recents
-    // thumbnail. Dev builds (package .dev) stay capturable for test screenshots.
-    if (!packageName.endsWith(".dev")) {
-      window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-    }
+    // thumbnail. Development builds too; Settings there has a switch that lifts
+    // it for test screenshots (encedo-push setPrivacy).
+    window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
   }
 }

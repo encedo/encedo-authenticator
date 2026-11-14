@@ -7,9 +7,13 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.WebView
 import app.tauri.PermissionState
 import app.tauri.annotation.Command
+import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.Permission
 import app.tauri.annotation.PermissionCallback
 import app.tauri.annotation.TauriPlugin
@@ -23,7 +27,15 @@ import com.google.firebase.messaging.RemoteMessage
  * Commands: getToken, requestPermissions, checkPermissions (base class).
  * Events: "token" {token}, "message" {title, body, data}, "tapped" {data},
  * "lifecycle" {state: "paused" | "resumed"} (the app lock and the refresh on return hang on it).
+ * Privacy: setPrivacy {cover, lockAfterMs, allowCapture}, uncover.
  */
+@InvokeArg
+class PrivacyArgs {
+    var cover: Boolean = false
+    var lockAfterMs: Long = 5000
+    var allowCapture: Boolean = false
+}
+
 @TauriPlugin(
     permissions = [
         Permission(strings = [Manifest.permission.POST_NOTIFICATIONS], alias = "notifications")
@@ -68,12 +80,73 @@ class PushPlugin(private val activity: Activity) : Plugin(activity) {
     // pause is only read on resume; the time away is therefore measured here.
     override fun onPause() {
         pausedAt = System.currentTimeMillis()
+        if (coverOnPause) showCover()
         lifecycle("paused", 0)
     }
 
     override fun onResume() {
         val away = if (pausedAt > 0) System.currentTimeMillis() - pausedAt else 0
+        // Back before the lock would fire: what was on screen may show again.
+        // Otherwise the cover stays until the webview has drawn the Locked
+        // screen and calls uncover, with a timeout in case it never does.
+        if (cover != null) {
+            if (away < lockAfterMs) hideCover()
+            else activity.window.decorView.postDelayed({ hideCover() }, 3000)
+        }
         lifecycle("resumed", away)
+    }
+
+    // --- Privacy: what the app shows stays out of recents, screenshots and the
+    // first frames after coming back, while the lock is on.
+
+    private var coverOnPause = false
+    private var lockAfterMs = 5000L
+    private var cover: View? = null
+
+    /** A plain view in the window's ground colour over the webview. Added while
+     *  the app is away, so the frame shown on return is this, not the last screen. */
+    private fun showCover() {
+        activity.runOnUiThread {
+            if (cover != null) return@runOnUiThread
+            val content = activity.findViewById<ViewGroup>(android.R.id.content) ?: return@runOnUiThread
+            val v = View(activity)
+            v.background = activity.window.decorView.background?.constantState?.newDrawable()
+            if (v.background == null) v.setBackgroundColor(android.graphics.Color.BLACK)
+            v.isClickable = true // swallows touches meant for what is underneath
+            content.addView(v, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            cover = v
+        }
+    }
+
+    private fun hideCover() {
+        activity.runOnUiThread {
+            val v = cover ?: return@runOnUiThread
+            (v.parent as? ViewGroup)?.removeView(v)
+            cover = null
+        }
+    }
+
+    /** The webview says whether the lock is on (then cover while away) and, in a
+     *  development build only, whether screenshots are allowed for testing. */
+    @Command
+    fun setPrivacy(invoke: Invoke) {
+        val args = invoke.parseArgs(PrivacyArgs::class.java)
+        coverOnPause = args.cover
+        lockAfterMs = args.lockAfterMs
+        val capture = args.allowCapture && activity.packageName.endsWith(".dev")
+        activity.runOnUiThread {
+            if (capture) activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            else activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        if (!coverOnPause) hideCover()
+        invoke.resolve()
+    }
+
+    /** The webview has drawn what may be seen (the Locked screen, or the screen it was on). */
+    @Command
+    fun uncover(invoke: Invoke) {
+        hideCover()
+        invoke.resolve()
     }
 
     private fun lifecycle(state: String, awayMs: Long) {

@@ -94,7 +94,7 @@
       {/if}
       <Switch label="Lock when in background" hint="Ask again after switching apps, or after 5 min untouched" bind:checked={app.settings.lock_on_background} onchange={() => app.saveSettings()} />
       {#if app.settings.biometric_lock}
-        <Switch label="Confirm every Allow" hint="Ask for your fingerprint or PIN again before an answer is sent" bind:checked={app.settings.confirm_each_allow} onchange={() => app.saveSettings()} />
+        <Switch label="Confirm every Allow" hint="Ask for your fingerprint again before an answer is sent; the PIN only on a phone without one" bind:checked={app.settings.confirm_each_allow} onchange={() => app.saveSettings()} />
       {/if}
     </div>
     <div class="field">
@@ -236,6 +236,10 @@
           <button onclick={() => app.simulateUpdate("recommended")}>Recommended</button>
           <button onclick={() => app.simulateUpdate("critical")}>Blocking</button>
         </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><span>Screenshots</span><span class="v">development build</span></div>
+        <Switch label="Allow screenshots" hint="For test screenshots only; the app also shows in recents. Off, as in the release." checked={app.allowCapture} onchange={() => app.setAllowCapture(!app.allowCapture)} />
       </div>
     {/if}
 

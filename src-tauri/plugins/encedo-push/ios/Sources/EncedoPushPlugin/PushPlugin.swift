@@ -41,6 +41,11 @@ class PushPlugin: Plugin {
 
   // ---- commands --------------------------------------------------------------
 
+  // The cover while away and the screenshot switch are Android only so far;
+  // iOS answers so the webview's calls resolve.
+  @objc public func setPrivacy(_ invoke: Invoke) { invoke.resolve() }
+  @objc public func uncover(_ invoke: Invoke) { invoke.resolve() }
+
   @objc public func getToken(_ invoke: Invoke) {
     Messaging.messaging().token { token, error in
       if let token = token, !token.isEmpty {

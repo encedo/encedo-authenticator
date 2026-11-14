@@ -1,8 +1,9 @@
 import type { Settings } from "./api";
 import { api, ApiError, type AnswerView, type AuditHealth, type Family, type LogEntry, type ModuleView, type Outcome, type PairingPreview, type RefreshReport, type RequestView, type StoreStatus, type UpdateStatus } from "./api";
-import { biometricAuth, biometricStatus, inTauri, trace, requestPushPermission, startPush, type PushMessage, type PushState } from "./native";
+import { biometricAuth, biometricStatus, inTauri, trace, requestPushPermission, setPrivacy, startPush, uncover, type PushMessage, type PushState } from "./native";
 import * as mock from "./mock";
 import { listen } from "@tauri-apps/api/event";
+import { tick } from "svelte";
 
 export type Screen =
   | { name: "welcome" }
@@ -179,6 +180,7 @@ class AppState {
     this.settings = settings;
     this.modules = modules;
     this.log = log;
+    this.syncPrivacy();
     void this.loadHealth();
   }
 
@@ -307,7 +309,28 @@ class AppState {
 
   async saveSettings() {
     if (!inTauri) return;
+    this.syncPrivacy();
     try { await api.settingsSet($state.snapshot(this.settings)); } catch (e) { this.fail(e); }
+  }
+
+  /** Development builds only: lift FLAG_SECURE for test screenshots. Kept in
+   *  this webview's storage; a release build ignores it natively as well. */
+  allowCapture = $state(AppState.readAllowCapture());
+  private static readonly CAPTURE_KEY = "encedo.dev.allowCapture";
+  private static readAllowCapture(): boolean {
+    try { return localStorage.getItem(AppState.CAPTURE_KEY) === "1"; } catch { return false; }
+  }
+  setAllowCapture(on: boolean) {
+    this.allowCapture = on;
+    try { localStorage.setItem(AppState.CAPTURE_KEY, on ? "1" : "0"); } catch {}
+    this.syncPrivacy();
+  }
+
+  /** Tell the native side whether to cover the app while it is away: only when
+   *  coming back after LOCK_AFTER_MS would lock it. */
+  private syncPrivacy() {
+    const cover = this.settings.onboarded && this.settings.biometric_lock && this.settings.lock_on_background;
+    void setPrivacy(cover, AppState.LOCK_AFTER_MS, this.allowCapture);
   }
 
   async finishOnboarding() {
@@ -345,6 +368,8 @@ class AppState {
       void this.logApp("app.foreground", "App came back", awayMs ? `away ${Math.round(awayMs / 1000)} s` : "");
       void this.checkUpdate();
     }
+    // The native cover stays up until the screen decided on here is drawn.
+    void tick().then(() => requestAnimationFrame(() => requestAnimationFrame(() => void uncover())));
     if (this.unlocking) return; // the biometric prompt itself pauses the activity
     const away = awayMs;
     const mustLock = this.settings.onboarded && this.settings.biometric_lock && this.settings.lock_on_background && away >= AppState.LOCK_AFTER_MS;

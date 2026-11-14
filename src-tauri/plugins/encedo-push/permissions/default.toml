@@ -8,4 +8,6 @@ permissions = [
   "allow-check-permissions",
   "allow-register-listener",
   "allow-remove-listener",
+  "allow-set-privacy",
+  "allow-uncover",
 ]

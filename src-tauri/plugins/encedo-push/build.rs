@@ -6,6 +6,8 @@ const COMMANDS: &[&str] = &[
     "check_permissions",
     "register_listener",
     "remove_listener",
+    "set_privacy",
+    "uncover",
 ];
 
 fn main() {

@@ -163,6 +163,21 @@ export async function startPush(h: PushHandlers): Promise<PushState> {
   }
 }
 
+/** Android: cover the app while it is away when the lock is on, and keep
+ *  FLAG_SECURE unless a development build asked to allow screenshots. */
+export async function setPrivacy(cover: boolean, lockAfterMs: number, allowCapture: boolean): Promise<void> {
+  if (!inTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke(`plugin:${PUSH}|set_privacy`, { cover, lockAfterMs, allowCapture }).catch((e) => trace("set_privacy failed " + String(e)));
+}
+
+/** Take the cover away once what may be seen has been drawn. */
+export async function uncover(): Promise<void> {
+  if (!inTauri) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke(`plugin:${PUSH}|uncover`).catch(() => {});
+}
+
 export async function requestPushPermission(): Promise<boolean> {
   if (!inTauri) return false;
   const { invoke } = await import("@tauri-apps/api/core");
